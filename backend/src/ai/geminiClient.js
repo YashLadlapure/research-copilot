@@ -52,6 +52,7 @@ async function extractSections(text, profile) {
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
     return JSON.parse(cleaned);
   } catch (firstError) {
+    console.error('[Gemini] First attempt error:', firstError?.message || firstError);
     // Retry with stricter prompt
     try {
       const retryResult = await model.generateContent(buildRetryPrompt(text));
@@ -59,6 +60,7 @@ async function extractSections(text, profile) {
       const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
       return JSON.parse(cleaned);
     } catch (retryError) {
+      console.error('[Gemini] Retry attempt error:', retryError?.message || retryError);
       throw new Error('Gemini section extraction failed after retry. Please try again.');
     }
   }
