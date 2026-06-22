@@ -3,23 +3,24 @@ const router = express.Router();
 const { getProfileConfig } = require('../profiles/index');
 const { createSession } = require('../store');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
+const { extractSections } = require('../ai/geminiClient');
 
 function normalizeText(text) {
   return text.trim().replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
 }
 
-function buildDummyStructured(text) {
+function mapToStructured(geminiJson) {
   return {
-    title: 'Extracted Title (placeholder)',
-    abstract: text.slice(0, 300),
-    keywords: ['keyword1', 'keyword2', 'keyword3'],
-    sectionsDetected: ['introduction', 'methodology', 'results', 'conclusion', 'references'],
-    sectionsMissing: ['abstract', 'keywords'],
-    referencesPresent: true,
+    title: geminiJson.title || '',
+    abstract: geminiJson.abstract || '',
+    keywords: Array.isArray(geminiJson.keywords) ? geminiJson.keywords : [],
+    sectionsDetected: Array.isArray(geminiJson.sections_detected) ? geminiJson.sections_detected : [],
+    sectionsMissing: Array.isArray(geminiJson.sections_missing) ? geminiJson.sections_missing : [],
+    referencesPresent: geminiJson.references_present === true,
   };
 }
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { text, profile } = req.body;
 
   if (!text || !profile) {
@@ -34,7 +35,15 @@ router.post('/', (req, res) => {
   }
 
   const normalizedText = normalizeText(text);
-  const structuredManuscript = buildDummyStructured(normalizedText);
+
+  let structuredManuscript;
+  try {
+    const geminiJson = await extractSections(normalizedText, profile);
+    structuredManuscript = mapToStructured(geminiJson);
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
+
   const complianceReport = evaluateCompliance(structuredManuscript, profileConfig);
   const sessionId = Date.now().toString();
 
