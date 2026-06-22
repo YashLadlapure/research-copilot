@@ -2,6 +2,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
+
 const EXTRACTION_SCHEMA = `{
   "title": "string",
   "abstract": "string",
@@ -43,7 +45,7 @@ ${text.slice(0, 8000)}`;
 }
 
 async function extractSections(text, profile) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: MODEL });
 
   // First attempt
   try {
