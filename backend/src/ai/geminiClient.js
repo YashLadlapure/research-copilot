@@ -43,7 +43,7 @@ ${text.slice(0, 8000)}`;
 }
 
 async function extractSections(text, profile) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   // First attempt
   try {
