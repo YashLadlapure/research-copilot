@@ -2,7 +2,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
+// gemini-2.0-flash-lite was shut down June 1, 2026. Use gemini-3.1-flash-lite as default.
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
 const EXTRACTION_SCHEMA = `{
   "title": "string",
@@ -55,7 +56,13 @@ async function extractSections(text, profile) {
     return JSON.parse(cleaned);
   } catch (firstError) {
     console.error('[Gemini] First attempt error:', firstError?.message || firstError);
-    // Retry with stricter prompt
+
+    // Check for quota exhaustion — no point retrying with same model
+    if (firstError?.message?.includes('429') || firstError?.message?.includes('quota')) {
+      throw new Error('Gemini quota exceeded. Please check your API key and model quota at https://ai.dev/rate-limit');
+    }
+
+    // Retry with stricter prompt for other errors
     try {
       const retryResult = await model.generateContent(buildRetryPrompt(text));
       const raw = retryResult.response.text().trim();
