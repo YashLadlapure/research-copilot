@@ -12,14 +12,18 @@ const MODE_INSTRUCTIONS = {
     'Polish the writing style more thoroughly. Improve academic tone, sentence structure, and conciseness. Do not add new scientific claims or alter cited results.',
 };
 
-function buildPrompt(sectionText, profile, mode) {
+function buildPrompt(sectionText, profile, mode, constraints) {
   const instruction = MODE_INSTRUCTIONS[mode.toLowerCase()] || MODE_INSTRUCTIONS.balanced;
+  const constraintBlock = constraints && constraints.length > 0
+    ? `\nCompliance constraints you MUST satisfy in your revision:\n${constraints.map(c => `- ${c}`).join('\n')}\n`
+    : '';
+
   return `You are a research manuscript editor helping an author prepare their paper for ${profile.toUpperCase()} submission.
 
 Refinement mode: ${mode.toUpperCase()}
 Instruction: ${instruction}
-
-Refine the following section text according to the instruction above.
+${constraintBlock}
+Refine the following section text according to the instruction and all compliance constraints above.
 
 Return ONLY a valid JSON object with exactly these keys:
 {
@@ -49,16 +53,15 @@ function parseJSON(raw) {
   return JSON.parse(cleaned);
 }
 
-async function refineSectionText(sectionText, profile, mode) {
+async function refineSectionText(sectionText, profile, mode, constraints = []) {
   const model = genAI.getGenerativeModel({ model: MODEL });
   try {
-    const result = await model.generateContent(buildPrompt(sectionText, profile, mode));
+    const result = await model.generateContent(buildPrompt(sectionText, profile, mode, constraints));
     return parseJSON(result.response.text());
   } catch (err) {
     if (err?.message?.includes('429') || err?.message?.includes('quota')) {
       throw new Error('Gemini quota exceeded. Check your API key at https://aistudio.google.com');
     }
-    // one retry with a shorter prompt
     try {
       const retry = await model.generateContent(
         `Refine this text for ${profile} (${mode} mode). Return raw JSON only with keys: original_text, revised_text, change_summary, rationale, safety_note, confidence.\n\n${sectionText.slice(0, 3000)}`
