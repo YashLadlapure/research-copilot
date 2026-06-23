@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import './App.css';
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { analyzeManuscript, refineSection, applySuggestion } from './api';
 
 const PROFILES = [
   { value: 'springer_lncs', label: 'Springer LNCS' },
@@ -14,36 +13,44 @@ const SEVERITY_COLOR = {
   Good: '#22c55e',
 };
 
+function scoreColor(score) {
+  if (score >= 75) return '#22c55e';
+  if (score >= 50) return '#f59e0b';
+  return '#ef4444';
+}
+
 export default function App() {
   const [text, setText] = useState('');
   const [profile, setProfile] = useState('springer_lncs');
   const [loading, setLoading] = useState(false);
+  const [refineMode, setRefineMode] = useState('strict');
+
+  // Core state
   const [sessionId, setSessionId] = useState(null);
-  const [structured, setStructured] = useState(null);
-  const [report, setReport] = useState(null);
+  const [structured, setStructured] = useState(null);   // structuredManuscript
+  const [report, setReport] = useState(null);            // complianceReport
+
+  // Refine state
   const [selectedSection, setSelectedSection] = useState(null);
-  const [currentSuggestion, setCurrentSuggestion] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);
+
   const [error, setError] = useState(null);
 
+  // ─── Analyze ────────────────────────────────────────────────────────────────
   const handleAnalyze = async () => {
     if (!text.trim()) return;
     setLoading(true);
     setError(null);
     setReport(null);
     setStructured(null);
-    setCurrentSuggestion(null);
+    setSessionId(null);
+    setSuggestion(null);
     setSelectedSection(null);
     try {
-      const res = await fetch(`${API}/api/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manuscriptText: text, profile }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Analysis failed');
+      const data = await analyzeManuscript(text, profile);
       setSessionId(data.sessionId);
-      setStructured(data.structured);
-      setReport(data.report);
+      setStructured(data.structuredManuscript);
+      setReport(data.complianceReport);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -51,20 +58,16 @@ export default function App() {
     }
   };
 
+  // ─── Refine ──────────────────────────────────────────────────────────────────
   const handleRefine = async (section) => {
     if (!sessionId) return;
     setSelectedSection(section);
-    setCurrentSuggestion(null);
+    setSuggestion(null);
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`${API}/api/refine-section`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, targetSection: section, mode: 'strict' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Refinement failed');
-      setCurrentSuggestion(data.suggestion);
+      const data = await refineSection(sessionId, section, refineMode);
+      setSuggestion(data.suggestion);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -72,34 +75,28 @@ export default function App() {
     }
   };
 
+  // ─── Apply / Reject ──────────────────────────────────────────────────────────
   const handleApply = async () => {
-    if (!sessionId || !currentSuggestion) return;
+    if (!sessionId || !suggestion) return;
     try {
-      await fetch(`${API}/api/apply-suggestion`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          targetSection: selectedSection,
-          revisedText: currentSuggestion.revised_text,
-        }),
-      });
-      setCurrentSuggestion(null);
-      setSelectedSection(null);
+      await applySuggestion(sessionId, selectedSection, suggestion.revised_text);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSuggestion(null);
+      setSelectedSection(null);
     }
   };
 
-  const scoreColor = (score) => {
-    if (score >= 75) return '#22c55e';
-    if (score >= 50) return '#f59e0b';
-    return '#ef4444';
+  const handleReject = () => {
+    setSuggestion(null);
+    setSelectedSection(null);
   };
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="app-root">
-      {/* Hero */}
+      {/* ── Hero ── */}
       <header className="hero">
         <h1>🔬 Research Copilot</h1>
         <p>AI-assisted publication compliance and safe manuscript refinement</p>
@@ -113,7 +110,7 @@ export default function App() {
       )}
 
       <div className="main-grid">
-        {/* LEFT — Input */}
+        {/* ══ LEFT – Input ══ */}
         <section className="panel panel-left">
           <h2>Manuscript</h2>
 
@@ -137,12 +134,23 @@ export default function App() {
             rows={20}
           />
 
+          <label className="field-label">Refine Mode</label>
+          <select
+            className="select"
+            value={refineMode}
+            onChange={(e) => setRefineMode(e.target.value)}
+          >
+            <option value="strict">Strict — grammar only</option>
+            <option value="balanced">Balanced — clarity + flow</option>
+            <option value="aggressive">Aggressive — full polish</option>
+          </select>
+
           <button
             className="btn btn-primary"
             onClick={handleAnalyze}
             disabled={loading || !text.trim()}
           >
-            {loading ? '⏳ Analyzing…' : '🔍 Analyze Manuscript'}
+            {loading && !selectedSection ? '⏳ Analyzing…' : '🔍 Analyze Manuscript'}
           </button>
 
           <p className="trust-note">
@@ -151,7 +159,7 @@ export default function App() {
           </p>
         </section>
 
-        {/* CENTER — Compliance Dashboard */}
+        {/* ══ CENTER – Compliance Dashboard ══ */}
         <section className="panel panel-center">
           <h2>Compliance Dashboard</h2>
 
@@ -159,7 +167,7 @@ export default function App() {
             <div className="empty-state">Run analysis to see your compliance report.</div>
           )}
 
-          {loading && (
+          {loading && !selectedSection && (
             <div className="loading-state">
               <div className="spinner" />
               <p>Processing manuscript…</p>
@@ -169,9 +177,16 @@ export default function App() {
           {report && (
             <>
               {/* Score Card */}
-              <div className="score-card" style={{ borderColor: scoreColor(report.overallScore) }}>
-                <div className="score-value" style={{ color: scoreColor(report.overallScore) }}>
-                  {report.overallScore}<span className="score-unit">/100</span>
+              <div
+                className="score-card"
+                style={{ borderColor: scoreColor(report.overallScore) }}
+              >
+                <div
+                  className="score-value"
+                  style={{ color: scoreColor(report.overallScore) }}
+                >
+                  {report.overallScore}
+                  <span className="score-unit">/100</span>
                 </div>
                 <div className="score-label">Readiness Score</div>
               </div>
@@ -179,30 +194,53 @@ export default function App() {
               {/* Section Status */}
               <h3>Section Status</h3>
               <div className="section-status-list">
-                {structured?.sections_detected?.map((sec) => (
-                  <div key={sec} className="section-chip section-chip--found">✅ {sec}</div>
-                ))}
-                {structured?.sections_missing?.map((sec) => (
-                  <div key={sec} className="section-chip section-chip--missing">❌ {sec}</div>
-                ))}
+                {/* Use sectionStatus if present (array of {name,status}), else fall back to detected/missing arrays */}
+                {Array.isArray(report.sectionStatus) && report.sectionStatus.length > 0
+                  ? report.sectionStatus.map((s) => (
+                      <div
+                        key={s.name}
+                        className={`section-chip ${
+                          s.status === 'present' ? 'section-chip--found' : 'section-chip--missing'
+                        }`}
+                      >
+                        {s.status === 'present' ? '✅' : '❌'} {s.name}
+                      </div>
+                    ))
+                  : (
+                    <>
+                      {structured?.sectionsDetected?.map((sec) => (
+                        <div key={sec} className="section-chip section-chip--found">✅ {sec}</div>
+                      ))}
+                      {structured?.sectionsMissing?.map((sec) => (
+                        <div key={sec} className="section-chip section-chip--missing">❌ {sec}</div>
+                      ))}
+                    </>
+                  )
+                }
               </div>
 
               {/* Issues */}
-              <h3>Issues ({report.issues?.length || 0})</h3>
+              <h3>Issues ({report.issues?.length ?? 0})</h3>
               <div className="issues-list">
-                {report.issues?.length === 0 && (
+                {(!report.issues || report.issues.length === 0) && (
                   <div className="issue-card issue-card--good">🎉 No issues found!</div>
                 )}
                 {report.issues?.map((issue, i) => (
                   <div
                     key={i}
                     className="issue-card"
-                    style={{ borderLeftColor: SEVERITY_COLOR[issue.severity] }}
+                    style={{
+                      borderLeftColor:
+                        SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review,
+                    }}
                   >
                     <div className="issue-header">
                       <span
                         className="severity-badge"
-                        style={{ background: SEVERITY_COLOR[issue.severity] }}
+                        style={{
+                          background:
+                            SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review,
+                        }}
                       >
                         {issue.severity}
                       </span>
@@ -226,11 +264,11 @@ export default function App() {
           )}
         </section>
 
-        {/* RIGHT — Revision Preview */}
+        {/* ══ RIGHT – Revision Preview ══ */}
         <section className="panel panel-right">
           <h2>Revision Preview</h2>
 
-          {!currentSuggestion && !loading && (
+          {!suggestion && !loading && (
             <div className="empty-state">
               {selectedSection
                 ? `Selected: ${selectedSection} — waiting for suggestion…`
@@ -241,46 +279,58 @@ export default function App() {
           {loading && selectedSection && (
             <div className="loading-state">
               <div className="spinner" />
-              <p>Generating Gemini suggestion for <strong>{selectedSection}</strong>…</p>
+              <p>
+                Generating Gemini suggestion for{' '}
+                <strong>{selectedSection}</strong>…
+              </p>
             </div>
           )}
 
-          {currentSuggestion && (
+          {suggestion && (
             <>
               <div className="diff-header">
-                <span className="diff-section-label">Section: <strong>{currentSuggestion.target_section}</strong></span>
-                <span className="diff-mode-label">Mode: {currentSuggestion.mode || 'strict'}</span>
+                <span className="diff-section-label">
+                  Section: <strong>{suggestion.target_section}</strong>
+                </span>
+                <span className="diff-mode-label">Mode: {suggestion.mode || refineMode}</span>
               </div>
 
               <div className="diff-grid">
                 <div className="diff-col diff-col--original">
                   <div className="diff-col-title">Original</div>
-                  <pre className="diff-text">{currentSuggestion.original_text}</pre>
+                  <pre className="diff-text">{suggestion.original_text}</pre>
                 </div>
                 <div className="diff-col diff-col--revised">
                   <div className="diff-col-title">Suggested</div>
-                  <pre className="diff-text">{currentSuggestion.revised_text}</pre>
+                  <pre className="diff-text">{suggestion.revised_text}</pre>
                 </div>
               </div>
 
               <div className="suggestion-meta">
-                {currentSuggestion.rationale && (
-                  <p><strong>Rationale:</strong> {currentSuggestion.rationale}</p>
+                {suggestion.change_summary && (
+                  <p><strong>Summary:</strong> {suggestion.change_summary}</p>
                 )}
-                {currentSuggestion.safety_note && (
-                  <p className="safety-note">🛡️ <strong>Safety:</strong> {currentSuggestion.safety_note}</p>
+                {suggestion.rationale && (
+                  <p><strong>Rationale:</strong> {suggestion.rationale}</p>
                 )}
-                {currentSuggestion.confidence !== undefined && (
-                  <p><strong>Confidence:</strong> {Math.round(currentSuggestion.confidence * 100)}%</p>
+                {suggestion.safety_note && (
+                  <p className="safety-note">
+                    🛡️ <strong>Safety:</strong> {suggestion.safety_note}
+                  </p>
+                )}
+                {suggestion.confidence !== undefined && (
+                  <p>
+                    <strong>Confidence:</strong>{' '}
+                    {Math.round(suggestion.confidence * 100)}%
+                  </p>
                 )}
               </div>
 
               <div className="revision-actions">
-                <button className="btn btn-success" onClick={handleApply}>✅ Apply</button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => { setCurrentSuggestion(null); setSelectedSection(null); }}
-                >
+                <button className="btn btn-success" onClick={handleApply}>
+                  ✅ Apply
+                </button>
+                <button className="btn btn-ghost" onClick={handleReject}>
                   ✕ Reject
                 </button>
               </div>
