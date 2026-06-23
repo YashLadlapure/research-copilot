@@ -12,6 +12,11 @@ const MODE_INSTRUCTIONS = {
     'Polish the writing style more thoroughly. Improve academic tone, sentence structure, and conciseness. Do not add new scientific claims or alter cited results.',
 };
 
+function normalizeText(sectionText) {
+  if (Array.isArray(sectionText)) return sectionText.join(', ');
+  return String(sectionText);
+}
+
 function buildPrompt(sectionText, profile, mode, constraints) {
   const instruction = MODE_INSTRUCTIONS[mode.toLowerCase()] || MODE_INSTRUCTIONS.balanced;
   const constraintBlock = constraints && constraints.length > 0
@@ -23,14 +28,14 @@ function buildPrompt(sectionText, profile, mode, constraints) {
 Refinement mode: ${mode.toUpperCase()}
 Instruction: ${instruction}
 ${constraintBlock}
-Refine the following section text according to the instruction and all compliance constraints above.
+Refine the following section text according to the instruction and ALL compliance constraints above. The constraints are not optional — if the constraint says shorten to 150 words, the revised_text must be 150 words or fewer. If it says use 4–6 keywords, return exactly 4–6 keywords.
 
 Return ONLY a valid JSON object with exactly these keys:
 {
   "original_text": "the input text unchanged",
   "revised_text": "your refined version",
-  "change_summary": "one sentence describing what was changed",
-  "rationale": "why these changes improve the section for ${profile.toUpperCase()}",
+  "change_summary": "one sentence describing what was changed and what constraint was addressed",
+  "rationale": "why these changes fix the compliance issue for ${profile.toUpperCase()}",
   "safety_note": "confirmation that no claims, citations, or numbers were altered",
   "confidence": 0.0
 }
@@ -40,7 +45,14 @@ Rules:
 - Return JSON only. No markdown, no code fences, no explanation outside the JSON.
 
 Section text:
-${sectionText.slice(0, 6000)}`;
+${normalizeText(sectionText).slice(0, 6000)}`;
+}
+
+function buildRetryPrompt(sectionText, profile, mode, constraints) {
+  const constraintBlock = constraints && constraints.length > 0
+    ? `Constraints to fix:\n${constraints.map(c => `- ${c}`).join('\n')}\n`
+    : '';
+  return `Fix this manuscript section for ${profile.toUpperCase()} (${mode} mode).\n${constraintBlock}\nReturn raw JSON only with keys: original_text, revised_text, change_summary, rationale, safety_note, confidence.\n\n${normalizeText(sectionText).slice(0, 3000)}`;
 }
 
 function parseJSON(raw) {
@@ -63,9 +75,7 @@ async function refineSectionText(sectionText, profile, mode, constraints = []) {
       throw new Error('Gemini quota exceeded. Check your API key at https://aistudio.google.com');
     }
     try {
-      const retry = await model.generateContent(
-        `Refine this text for ${profile} (${mode} mode). Return raw JSON only with keys: original_text, revised_text, change_summary, rationale, safety_note, confidence.\n\n${sectionText.slice(0, 3000)}`
-      );
+      const retry = await model.generateContent(buildRetryPrompt(sectionText, profile, mode, constraints));
       return parseJSON(retry.response.text());
     } catch (retryErr) {
       throw new Error('Gemini refinement failed. Please try again.');
