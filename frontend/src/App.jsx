@@ -22,21 +22,17 @@ function scoreColor(score) {
 export default function App() {
   const [text, setText] = useState('');
   const [profile, setProfile] = useState('springer_lncs');
-  const [loading, setLoading] = useState(false);
   const [refineMode, setRefineMode] = useState('strict');
+  const [loading, setLoading] = useState(false);
 
-  // Core state
   const [sessionId, setSessionId] = useState(null);
-  const [structured, setStructured] = useState(null);   // structuredManuscript
-  const [report, setReport] = useState(null);            // complianceReport
+  const [structured, setStructured] = useState(null);
+  const [report, setReport] = useState(null);
 
-  // Refine state
   const [selectedSection, setSelectedSection] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
-
   const [error, setError] = useState(null);
 
-  // ─── Analyze ────────────────────────────────────────────────────────────────
   const handleAnalyze = async () => {
     if (!text.trim()) return;
     setLoading(true);
@@ -58,7 +54,6 @@ export default function App() {
     }
   };
 
-  // ─── Refine ──────────────────────────────────────────────────────────────────
   const handleRefine = async (section) => {
     if (!sessionId) return;
     setSelectedSection(section);
@@ -75,7 +70,6 @@ export default function App() {
     }
   };
 
-  // ─── Apply / Reject ──────────────────────────────────────────────────────────
   const handleApply = async () => {
     if (!sessionId || !suggestion) return;
     try {
@@ -93,10 +87,8 @@ export default function App() {
     setSelectedSection(null);
   };
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="app-root">
-      {/* ── Hero ── */}
       <header className="hero">
         <h1>🔬 Research Copilot</h1>
         <p>AI-assisted publication compliance and safe manuscript refinement</p>
@@ -110,16 +102,12 @@ export default function App() {
       )}
 
       <div className="main-grid">
-        {/* ══ LEFT – Input ══ */}
+        {/* Left — manuscript input */}
         <section className="panel panel-left">
           <h2>Manuscript</h2>
 
           <label className="field-label">Publication Profile</label>
-          <select
-            className="select"
-            value={profile}
-            onChange={(e) => setProfile(e.target.value)}
-          >
+          <select className="select" value={profile} onChange={(e) => setProfile(e.target.value)}>
             {PROFILES.map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
@@ -135,11 +123,7 @@ export default function App() {
           />
 
           <label className="field-label">Refine Mode</label>
-          <select
-            className="select"
-            value={refineMode}
-            onChange={(e) => setRefineMode(e.target.value)}
-          >
+          <select className="select" value={refineMode} onChange={(e) => setRefineMode(e.target.value)}>
             <option value="strict">Strict — grammar only</option>
             <option value="balanced">Balanced — clarity + flow</option>
             <option value="aggressive">Aggressive — full polish</option>
@@ -159,7 +143,7 @@ export default function App() {
           </p>
         </section>
 
-        {/* ══ CENTER – Compliance Dashboard ══ */}
+        {/* Center — compliance results */}
         <section className="panel panel-center">
           <h2>Compliance Dashboard</h2>
 
@@ -176,25 +160,15 @@ export default function App() {
 
           {report && (
             <>
-              {/* Score Card */}
-              <div
-                className="score-card"
-                style={{ borderColor: scoreColor(report.overallScore) }}
-              >
-                <div
-                  className="score-value"
-                  style={{ color: scoreColor(report.overallScore) }}
-                >
-                  {report.overallScore}
-                  <span className="score-unit">/100</span>
+              <div className="score-card" style={{ borderColor: scoreColor(report.overallScore) }}>
+                <div className="score-value" style={{ color: scoreColor(report.overallScore) }}>
+                  {report.overallScore}<span className="score-unit">/100</span>
                 </div>
                 <div className="score-label">Readiness Score</div>
               </div>
 
-              {/* Section Status */}
               <h3>Section Status</h3>
               <div className="section-status-list">
-                {/* Use sectionStatus if present (array of {name,status}), else fall back to detected/missing arrays */}
                 {Array.isArray(report.sectionStatus) && report.sectionStatus.length > 0
                   ? report.sectionStatus.map((s) => (
                       <div
@@ -219,7 +193,6 @@ export default function App() {
                 }
               </div>
 
-              {/* Issues */}
               <h3>Issues ({report.issues?.length ?? 0})</h3>
               <div className="issues-list">
                 {(!report.issues || report.issues.length === 0) && (
@@ -229,18 +202,12 @@ export default function App() {
                   <div
                     key={i}
                     className="issue-card"
-                    style={{
-                      borderLeftColor:
-                        SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review,
-                    }}
+                    style={{ borderLeftColor: SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review }}
                   >
                     <div className="issue-header">
                       <span
                         className="severity-badge"
-                        style={{
-                          background:
-                            SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review,
-                        }}
+                        style={{ background: SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review }}
                       >
                         {issue.severity}
                       </span>
@@ -264,7 +231,7 @@ export default function App() {
           )}
         </section>
 
-        {/* ══ RIGHT – Revision Preview ══ */}
+        {/* Right — diff and suggestion review */}
         <section className="panel panel-right">
           <h2>Revision Preview</h2>
 
@@ -279,10 +246,7 @@ export default function App() {
           {loading && selectedSection && (
             <div className="loading-state">
               <div className="spinner" />
-              <p>
-                Generating Gemini suggestion for{' '}
-                <strong>{selectedSection}</strong>…
-              </p>
+              <p>Generating suggestion for <strong>{selectedSection}</strong>…</p>
             </div>
           )}
 
@@ -319,20 +283,13 @@ export default function App() {
                   </p>
                 )}
                 {suggestion.confidence !== undefined && (
-                  <p>
-                    <strong>Confidence:</strong>{' '}
-                    {Math.round(suggestion.confidence * 100)}%
-                  </p>
+                  <p><strong>Confidence:</strong> {Math.round(suggestion.confidence * 100)}%</p>
                 )}
               </div>
 
               <div className="revision-actions">
-                <button className="btn btn-success" onClick={handleApply}>
-                  ✅ Apply
-                </button>
-                <button className="btn btn-ghost" onClick={handleReject}>
-                  ✕ Reject
-                </button>
+                <button className="btn btn-success" onClick={handleApply}>✅ Apply</button>
+                <button className="btn btn-ghost" onClick={handleReject}>✕ Reject</button>
               </div>
             </>
           )}

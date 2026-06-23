@@ -1,7 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// Use a valid, available model — gemini-1.5-flash is free tier friendly
 const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 const MODE_INSTRUCTIONS = {
@@ -13,9 +12,8 @@ const MODE_INSTRUCTIONS = {
     'Polish the writing style more thoroughly. Improve academic tone, sentence structure, and conciseness. Do not add new scientific claims or alter cited results.',
 };
 
-function buildRefinePrompt(sectionText, profile, mode) {
+function buildPrompt(sectionText, profile, mode) {
   const instruction = MODE_INSTRUCTIONS[mode.toLowerCase()] || MODE_INSTRUCTIONS.balanced;
-
   return `You are a research manuscript editor helping an author prepare their paper for ${profile.toUpperCase()} submission.
 
 Refinement mode: ${mode.toUpperCase()}
@@ -41,48 +39,33 @@ Section text:
 ${sectionText.slice(0, 6000)}`;
 }
 
-function buildRefineRetryPrompt(sectionText, profile, mode) {
-  return `Refine this research paper section for ${profile.toUpperCase()} submission in ${mode} mode.
-Return ONLY raw JSON with no markdown or code fences.
-Required keys: original_text (string), revised_text (string), change_summary (string), rationale (string), safety_note (string), confidence (number 0-1).
-
-Section:
-${sectionText.slice(0, 4000)}`;
+function parseJSON(raw) {
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+  return JSON.parse(cleaned);
 }
 
 async function refineSectionText(sectionText, profile, mode) {
   const model = genAI.getGenerativeModel({ model: MODEL });
-
   try {
-    const result = await model.generateContent(buildRefinePrompt(sectionText, profile, mode));
-    const raw = result.response.text().trim();
-    const cleaned = raw
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim();
-    return JSON.parse(cleaned);
-  } catch (firstError) {
-    console.error('[Gemini Refine] First attempt error:', firstError?.message || firstError);
-
-    if (firstError?.message?.includes('429') || firstError?.message?.includes('quota')) {
-      throw new Error('Gemini quota exceeded. Check your API key quota at https://aistudio.google.com');
+    const result = await model.generateContent(buildPrompt(sectionText, profile, mode));
+    return parseJSON(result.response.text());
+  } catch (err) {
+    if (err?.message?.includes('429') || err?.message?.includes('quota')) {
+      throw new Error('Gemini quota exceeded. Check your API key at https://aistudio.google.com');
     }
-
+    // one retry with a shorter prompt
     try {
-      const retryResult = await model.generateContent(
-        buildRefineRetryPrompt(sectionText, profile, mode)
+      const retry = await model.generateContent(
+        `Refine this text for ${profile} (${mode} mode). Return raw JSON only with keys: original_text, revised_text, change_summary, rationale, safety_note, confidence.\n\n${sectionText.slice(0, 3000)}`
       );
-      const raw = retryResult.response.text().trim();
-      const cleaned = raw
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/```\s*$/i, '')
-        .trim();
-      return JSON.parse(cleaned);
-    } catch (retryError) {
-      console.error('[Gemini Refine] Retry error:', retryError?.message || retryError);
-      throw new Error('Gemini section refinement failed after retry. Please try again.');
+      return parseJSON(retry.response.text());
+    } catch (retryErr) {
+      throw new Error('Gemini refinement failed. Please try again.');
     }
   }
 }
