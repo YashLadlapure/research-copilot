@@ -40,8 +40,7 @@ function rebuildStructured(structured, sectionKey, revisedText) {
   let updated;
 
   if (sectionKey.toLowerCase() === 'keywords') {
-    const parsedKeywords = parseKeywords(revisedText);
-    updated = { ...structured, keywords: parsedKeywords };
+    updated = { ...structured, keywords: parseKeywords(revisedText) };
   } else {
     updated = { ...structured, [sectionKey]: revisedText };
   }
@@ -61,14 +60,21 @@ function rebuildStructured(structured, sectionKey, revisedText) {
   if (updated.title && updated.title.trim()) implicitSections.push('title');
   if (updated.abstract && updated.abstract.trim()) implicitSections.push('abstract');
   if (Array.isArray(updated.keywords) && updated.keywords.length > 0) implicitSections.push('keywords');
-  if (updated.referencesPresent) implicitSections.push('references');
 
   const mergedDetected = [...new Set([...updated.sectionsDetected, ...regexFound, ...implicitSections])];
+
+  // sync referencesPresent with what regex found
+  const referencesPresent =
+    updated.referencesPresent ||
+    mergedDetected.some(s => s.toLowerCase() === 'references' || s.toLowerCase() === 'bibliography');
+
+  if (referencesPresent) mergedDetected.push('references');
+
   const mergedMissing = (updated.sectionsMissing || []).filter(
     s => !mergedDetected.map(d => d.toLowerCase()).includes(s.toLowerCase())
   );
 
-  return { ...updated, sectionsDetected: mergedDetected, sectionsMissing: mergedMissing };
+  return { ...updated, sectionsDetected: [...new Set(mergedDetected)], sectionsMissing: mergedMissing, referencesPresent };
 }
 
 router.post('/', (req, res) => {

@@ -6,7 +6,7 @@ const { evaluateCompliance } = require('../rules/evaluateCompliance');
 const { extractSections } = require('../ai/geminiClient');
 
 const KNOWN_SECTIONS = [
-   'abstract', 'introduction', 'related work', 'literature review', 'background',
+  'abstract', 'introduction', 'related work', 'literature review', 'background',
   'methodology', 'methods', 'approach', 'system design', 'system architecture',
   'architecture', 'implementation', 'design', 'experiments', 'experimental setup',
   'evaluation', 'results', 'results and discussion', 'discussion', 'analysis',
@@ -57,7 +57,6 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
-  // if client passes existing sessionId and it has applied revisions, re-score from that session
   if (existingSessionId) {
     const existing = getSession(existingSessionId);
     if (existing && existing.structuredManuscript) {
@@ -79,9 +78,21 @@ router.post('/', async (req, res) => {
 
     const regexFound = regexSectionScan(normalizedText);
     const mergedDetected = [...new Set([...base.sectionsDetected, ...regexFound])];
-    const mergedMissing = base.sectionsMissing.filter(s => !mergedDetected.includes(s.toLowerCase()));
+    const mergedMissing = base.sectionsMissing.filter(
+      s => !mergedDetected.map(d => d.toLowerCase()).includes(s.toLowerCase())
+    );
 
-    structuredManuscript = { ...base, sectionsDetected: mergedDetected, sectionsMissing: mergedMissing };
+    // if regex found references/bibliography, trust it over Gemini's referencesPresent=false
+    const referencesPresent =
+      base.referencesPresent ||
+      mergedDetected.some(s => s.toLowerCase() === 'references' || s.toLowerCase() === 'bibliography');
+
+    structuredManuscript = {
+      ...base,
+      sectionsDetected: mergedDetected,
+      sectionsMissing: mergedMissing,
+      referencesPresent,
+    };
   } catch (err) {
     return res.status(502).json({ error: err.message });
   }
