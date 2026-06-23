@@ -74,7 +74,10 @@ export default function App() {
   const handleApply = async () => {
     if (!sessionId || !suggestion) return;
     try {
-      await applySuggestion(sessionId, selectedSection, suggestion.revised_text);
+      const data = await applySuggestion(sessionId, selectedSection, suggestion.revised_text);
+      if (data.complianceReport) {
+        setReport(data.complianceReport);
+      }
     } catch (err) {
       setError(err.message);
     } finally {

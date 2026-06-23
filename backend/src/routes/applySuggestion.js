@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { getSession, updateSession } = require('../store');
+const { getProfileConfig } = require('../profiles/index');
+const { evaluateCompliance } = require('../rules/evaluateCompliance');
 
 router.post('/', (req, res) => {
   const { sessionId, targetSection, revisedText } = req.body;
@@ -25,12 +27,27 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: `Section "${targetSection}" not found in manuscript.` });
   }
 
-  if (revisedText) {
-    const updatedManuscript = { ...structured, [sectionKey]: revisedText };
-    updateSession(sessionId, { structuredManuscript: updatedManuscript });
+  const updatedManuscript = revisedText
+    ? { ...structured, [sectionKey]: revisedText }
+    : structured;
+
+  let profileConfig;
+  try {
+    profileConfig = getProfileConfig(session.profile);
+  } catch (_) {
+    profileConfig = null;
   }
 
-  return res.json({ ok: true, applied: targetSection });
+  const newReport = profileConfig
+    ? evaluateCompliance(updatedManuscript, profileConfig)
+    : session.complianceReport;
+
+  updateSession(sessionId, {
+    structuredManuscript: updatedManuscript,
+    complianceReport: newReport,
+  });
+
+  return res.json({ ok: true, applied: targetSection, complianceReport: newReport });
 });
 
 module.exports = router;
