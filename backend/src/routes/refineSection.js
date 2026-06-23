@@ -3,50 +3,56 @@ const router = express.Router();
 const { getSession, updateSession } = require('../store');
 const { refineSectionText } = require('../ai/geminiRefine');
 
+// POST /api/refine-section
+// Body: { sessionId, targetSection, mode? }
 router.post('/', async (req, res) => {
-  const { sessionId, sectionName, mode = 'balanced', apply = false } = req.body;
+  // Support both field names: targetSection (frontend) and sectionName (legacy)
+  const { sessionId, targetSection, sectionName, mode = 'strict' } = req.body;
+  const section = targetSection || sectionName;
 
-  if (!sessionId || !sectionName) {
-    return res.status(400).json({ error: '"sessionId" and "sectionName" are required.' });
+  if (!sessionId || !section) {
+    return res.status(400).json({ error: '"sessionId" and "targetSection" are required.' });
   }
 
   const session = getSession(sessionId);
   if (!session) {
-    return res.status(404).json({ error: 'Session not found.' });
+    return res.status(404).json({ error: 'Session not found. Please re-analyze your manuscript.' });
   }
 
   const structured = session.structuredManuscript;
   if (!structured) {
-    return res.status(400).json({ error: 'No structured manuscript found in session.' });
+    return res.status(400).json({ error: 'No structured manuscript found. Please run Analyze first.' });
   }
 
-  const sectionKey = sectionName.toLowerCase();
-  const originalText = structured[sectionKey];
+  // Try exact key match first, then lowercase, then partial match
+  const sectionKey =
+    Object.keys(structured).find((k) => k === section) ||
+    Object.keys(structured).find((k) => k.toLowerCase() === section.toLowerCase()) ||
+    Object.keys(structured).find((k) => k.toLowerCase().includes(section.toLowerCase()));
+
+  const originalText = sectionKey ? structured[sectionKey] : null;
 
   if (!originalText) {
-    return res.status(400).json({ error: `Section "${sectionName}" not found in extracted manuscript.` });
+    return res.status(400).json({
+      error: `Section "${section}" not found. Available: ${Object.keys(structured).join(', ')}`,
+    });
   }
 
   try {
     const geminiResult = await refineSectionText(originalText, session.profile, mode);
 
     const suggestion = {
-      targetSection: sectionName,
-      originalText: geminiResult.original_text || originalText,
-      revisedText: geminiResult.revised_text,
-      changeSummary: geminiResult.change_summary,
+      target_section: section,
+      original_text: geminiResult.original_text || originalText,
+      revised_text: geminiResult.revised_text,
+      change_summary: geminiResult.change_summary,
       rationale: geminiResult.rationale,
-      safetyNote: geminiResult.safety_note,
+      safety_note: geminiResult.safety_note,
       mode,
       confidence: geminiResult.confidence,
     };
 
-    if (apply && geminiResult.revised_text) {
-      const updatedManuscript = { ...structured, [sectionKey]: geminiResult.revised_text };
-      updateSession(sessionId, { structuredManuscript: updatedManuscript });
-    }
-
-    return res.json(suggestion);
+    return res.json({ suggestion });
   } catch (err) {
     console.error('[refine-section] Error:', err.message);
     return res.status(500).json({ error: err.message });

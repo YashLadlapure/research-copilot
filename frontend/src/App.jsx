@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import './App.css';
 
+const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 const PROFILES = [
   { value: 'springer_lncs', label: 'Springer LNCS' },
   { value: 'ieee_conference', label: 'IEEE Conference' },
@@ -32,7 +34,7 @@ export default function App() {
     setCurrentSuggestion(null);
     setSelectedSection(null);
     try {
-      const res = await fetch('http://localhost:4000/api/analyze', {
+      const res = await fetch(`${API}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manuscriptText: text, profile }),
@@ -55,7 +57,7 @@ export default function App() {
     setCurrentSuggestion(null);
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:4000/api/refine-section', {
+      const res = await fetch(`${API}/api/refine-section`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, targetSection: section, mode: 'strict' }),
@@ -73,10 +75,14 @@ export default function App() {
   const handleApply = async () => {
     if (!sessionId || !currentSuggestion) return;
     try {
-      await fetch('http://localhost:4000/api/apply-suggestion', {
+      await fetch(`${API}/api/apply-suggestion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, targetSection: selectedSection }),
+        body: JSON.stringify({
+          sessionId,
+          targetSection: selectedSection,
+          revisedText: currentSuggestion.revised_text,
+        }),
       });
       setCurrentSuggestion(null);
       setSelectedSection(null);
@@ -224,11 +230,18 @@ export default function App() {
         <section className="panel panel-right">
           <h2>Revision Preview</h2>
 
-          {!currentSuggestion && (
+          {!currentSuggestion && !loading && (
             <div className="empty-state">
               {selectedSection
-                ? '⏳ Generating suggestion…'
+                ? `Selected: ${selectedSection} — waiting for suggestion…`
                 : 'Click "Refine Section" on an issue to see suggestions.'}
+            </div>
+          )}
+
+          {loading && selectedSection && (
+            <div className="loading-state">
+              <div className="spinner" />
+              <p>Generating Gemini suggestion for <strong>{selectedSection}</strong>…</p>
             </div>
           )}
 

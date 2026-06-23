@@ -1,7 +1,8 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+// Use a valid, available model — gemini-1.5-flash is free tier friendly
+const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 const MODE_INSTRUCTIONS = {
   strict:
@@ -33,7 +34,7 @@ Return ONLY a valid JSON object with exactly these keys:
 }
 
 Rules:
-- confidence is a number between 0 and 1 reflecting how confident you are the revision is safe and accurate
+- confidence is a number between 0 and 1
 - Return JSON only. No markdown, no code fences, no explanation outside the JSON.
 
 Section text:
@@ -55,19 +56,29 @@ async function refineSectionText(sectionText, profile, mode) {
   try {
     const result = await model.generateContent(buildRefinePrompt(sectionText, profile, mode));
     const raw = result.response.text().trim();
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+    const cleaned = raw
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim();
     return JSON.parse(cleaned);
   } catch (firstError) {
     console.error('[Gemini Refine] First attempt error:', firstError?.message || firstError);
 
     if (firstError?.message?.includes('429') || firstError?.message?.includes('quota')) {
-      throw new Error('Gemini quota exceeded. Check your API key quota at https://ai.dev/rate-limit');
+      throw new Error('Gemini quota exceeded. Check your API key quota at https://aistudio.google.com');
     }
 
     try {
-      const retryResult = await model.generateContent(buildRefineRetryPrompt(sectionText, profile, mode));
+      const retryResult = await model.generateContent(
+        buildRefineRetryPrompt(sectionText, profile, mode)
+      );
       const raw = retryResult.response.text().trim();
-      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
       return JSON.parse(cleaned);
     } catch (retryError) {
       console.error('[Gemini Refine] Retry error:', retryError?.message || retryError);
