@@ -119,6 +119,14 @@ export default function App() {
     }
   };
 
+  const handleSectionRowClick = (sectionName) => {
+    if (!sessionId) return;
+    const sec = sectionName.toLowerCase();
+    if (NON_REFINABLE.includes(sec)) return;
+    setSelectedSection(sectionName);
+    setSuggestion(null);
+  };
+
   const handleApply = async () => {
     if (!sessionId || !suggestion) return;
     try {
@@ -199,9 +207,7 @@ export default function App() {
   };
 
   const hasRevisions = Object.keys(revisedSections).length > 0;
-  const sectionsFound = structured
-    ? (structured.sectionsDetected?.length || 0)
-    : 0;
+  const sectionsFound = structured ? (structured.sectionsDetected?.length || 0) : 0;
   const sectionsTotal = structured
     ? (structured.sectionsDetected?.length || 0) + (structured.sectionsMissing?.length || 0)
     : 0;
@@ -215,8 +221,17 @@ export default function App() {
     if (tab === 'Language') return report.issues.filter(i =>
       ['keywords', 'title', 'abstract'].includes((i.section || '').toLowerCase())
     );
-    if (tab === 'AI Disclosure') return [];
-    return report.issues;
+    return [];
+  };
+
+  const buildSectionRows = () => {
+    if (Array.isArray(report?.sectionStatus) && report.sectionStatus.length > 0) {
+      return report.sectionStatus.map(s => ({ name: s.name, status: s.status, note: s.note || null }));
+    }
+    return [
+      ...(structured?.sectionsDetected || []).map(sec => ({ name: sec, status: 'Good', note: null })),
+      ...(structured?.sectionsMissing || []).map(sec => ({ name: sec, status: 'Missing', note: null })),
+    ];
   };
 
   return (
@@ -238,7 +253,7 @@ export default function App() {
 
       <div className="main-grid">
 
-        {/* ── LEFT: Upload & Rules ── */}
+        {/* ── LEFT ── */}
         <section className="panel panel-left">
           <div className="panel-heading">
             <span className="step-label">Step 1</span>
@@ -249,9 +264,7 @@ export default function App() {
             <div className="drop-zone-inner">
               {pdfLoading
                 ? <span className="drop-hint">Extracting text from PDF…</span>
-                : <>
-                    <span className="drop-hint">Drop PDF or paste manuscript text below</span>
-                  </>
+                : <span className="drop-hint">Drop PDF or paste manuscript text below</span>
               }
             </div>
             <input
@@ -309,22 +322,13 @@ export default function App() {
           </button>
 
           {report && (
-            <button
-              className="btn btn-outline"
-              onClick={handleExport}
-              style={{ marginTop: '8px' }}
-            >
+            <button className="btn btn-outline" onClick={handleExport} style={{ marginTop: '8px' }}>
               Export report
             </button>
           )}
 
           {hasRevisions && (
-            <button
-              className="btn btn-outline"
-              onClick={handleReanalyze}
-              disabled={loading}
-              style={{ marginTop: '8px' }}
-            >
+            <button className="btn btn-outline" onClick={handleReanalyze} disabled={loading} style={{ marginTop: '8px' }}>
               Re-score with applied changes
             </button>
           )}
@@ -335,7 +339,7 @@ export default function App() {
           </p>
         </section>
 
-        {/* ── CENTER: Compliance Dashboard ── */}
+        {/* ── CENTER ── */}
         <section className="panel panel-center">
           <div className="panel-heading">
             <span className="step-label">Step 2</span>
@@ -355,7 +359,6 @@ export default function App() {
 
           {report && (
             <>
-              {/* Score row */}
               <div className="score-row">
                 <div className="score-block">
                   <div className="score-value" style={{ color: scoreColor(report.overallScore) }}>
@@ -374,17 +377,20 @@ export default function App() {
                     <div className="meta-key">Sections found</div>
                   </div>
                   <div className="meta-item">
-                    <div className="meta-val" style={{ color: '#ef4444' }}>{report.issues?.filter(i => i.severity === 'Critical').length || 0}</div>
+                    <div className="meta-val" style={{ color: '#ef4444' }}>
+                      {report.issues?.filter(i => i.severity === 'Critical').length || 0}
+                    </div>
                     <div className="meta-key">Critical issues</div>
                   </div>
                   <div className="meta-item">
-                    <div className="meta-val" style={{ color: '#22c55e' }}>{report.issues?.filter(i => i.severity === 'Good').length || (report.issues?.length ? 0 : 0)}</div>
+                    <div className="meta-val" style={{ color: '#22c55e' }}>
+                      {report.issues?.filter(i => i.severity === 'Good').length || 0}
+                    </div>
                     <div className="meta-key">Safe fixes</div>
                   </div>
                 </div>
               </div>
 
-              {/* Tabs */}
               <div className="tab-bar">
                 {DASHBOARD_TABS.map(tab => (
                   <button
@@ -408,7 +414,6 @@ export default function App() {
                 </div>
               ) : (
                 <>
-                  {/* Issues */}
                   <div className="issues-list">
                     {issuesByTab(activeTab).length === 0 && (
                       <div className="issue-card issue-card--good">No issues in this category.</div>
@@ -434,42 +439,43 @@ export default function App() {
                     ))}
                   </div>
 
-                  {/* Section status rows */}
                   {activeTab === 'Overview' && (
                     <>
                       <h3 className="section-heading">Detected paper sections</h3>
                       <div className="section-rows">
-                        {Array.isArray(report.sectionStatus) && report.sectionStatus.length > 0
-                          ? report.sectionStatus.map(s => (
-                              <div key={s.name} className="section-row">
-                                <div className="section-row-name">{s.name}</div>
-                                <div className="section-row-note">{s.note || (s.status === 'Good' ? 'No issues detected' : 'Needs attention')}</div>
+                        {buildSectionRows().map(s => {
+                          const isNonRefinable = NON_REFINABLE.includes(s.name.toLowerCase());
+                          const isMissing = s.status === 'Missing';
+                          const isSelected = selectedSection === s.name;
+                          const clickable = sessionId && !isNonRefinable && !isMissing;
+                          return (
+                            <div
+                              key={s.name}
+                              className={`section-row${clickable ? ' section-row--clickable' : ''}${isSelected ? ' section-row--selected' : ''}`}
+                              onClick={() => clickable && handleSectionRowClick(s.name)}
+                              title={clickable ? `Click to refine ${s.name}` : undefined}
+                            >
+                              <div className="section-row-name" style={{ textTransform: 'capitalize' }}>{s.name}</div>
+                              <div className="section-row-note">
+                                {isSelected
+                                  ? 'Selected — click Refine in the right panel'
+                                  : s.note || (isMissing ? 'Not found in manuscript' : 'Detected')}
+                              </div>
+                              <div className="section-row-right">
+                                {revisedSections[s.name] && (
+                                  <span className="section-revised-badge">Revised</span>
+                                )}
                                 <span
                                   className="section-row-badge"
                                   style={{
-                                    background: s.status === 'Good' ? '#14532d' : s.status === 'Critical' ? '#450a0a' : '#78350f',
-                                    color: s.status === 'Good' ? '#86efac' : s.status === 'Critical' ? '#fca5a5' : '#fde68a',
+                                    background: isMissing ? '#450a0a' : s.status === 'Critical' ? '#450a0a' : s.status === 'Review' ? '#78350f' : '#14532d',
+                                    color: isMissing ? '#fca5a5' : s.status === 'Critical' ? '#fca5a5' : s.status === 'Review' ? '#fde68a' : '#86efac',
                                   }}
-                                >{s.status}</span>
+                                >{isMissing ? 'Missing' : s.status}</span>
                               </div>
-                            ))
-                          : [
-                              ...(structured?.sectionsDetected || []).map(sec => ({ name: sec, status: 'Good' })),
-                              ...(structured?.sectionsMissing || []).map(sec => ({ name: sec, status: 'Missing' })),
-                            ].map(s => (
-                              <div key={s.name} className="section-row">
-                                <div className="section-row-name" style={{ textTransform: 'capitalize' }}>{s.name}</div>
-                                <div className="section-row-note">{s.status === 'Good' ? 'Detected' : 'Not found in manuscript'}</div>
-                                <span
-                                  className="section-row-badge"
-                                  style={{
-                                    background: s.status === 'Good' ? '#14532d' : '#450a0a',
-                                    color: s.status === 'Good' ? '#86efac' : '#fca5a5',
-                                  }}
-                                >{s.status}</span>
-                              </div>
-                            ))
-                        }
+                            </div>
+                          );
+                        })}
                       </div>
                     </>
                   )}
@@ -479,18 +485,38 @@ export default function App() {
           )}
         </section>
 
-        {/* ── RIGHT: Safe Revision Preview ── */}
+        {/* ── RIGHT ── */}
         <section className="panel panel-right">
           <div className="panel-heading">
             <span className="step-label">Step 3</span>
             <h2>Safe revision preview</h2>
           </div>
 
-          {!suggestion && !loading && (
+          {!suggestion && !loading && !selectedSection && (
             <div className="empty-state">
-              {selectedSection
-                ? `Generating suggestion for ${selectedSection}…`
-                : 'Select an issue and click a refinement action to see suggestions here.'}
+              Click a section row or an issue action to refine a section.
+            </div>
+          )}
+
+          {!suggestion && !loading && selectedSection && (
+            <div className="section-selected-state">
+              <div className="section-selected-name" style={{ textTransform: 'capitalize' }}>{selectedSection}</div>
+              <p className="section-selected-hint">Ready to refine. This will send the section text to Gemini for safe improvement.</p>
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: '12px' }}
+                onClick={() => handleRefine(selectedSection)}
+                disabled={loading}
+              >
+                Refine {selectedSection}
+              </button>
+              <button
+                className="btn btn-outline"
+                style={{ marginTop: '8px' }}
+                onClick={handleReject}
+              >
+                Cancel
+              </button>
             </div>
           )}
 

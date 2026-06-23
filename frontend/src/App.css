@@ -220,12 +220,14 @@ body {
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
   font-family: inherit;
+  display: block;
+  width: 100%;
+  text-align: center;
 }
 
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-primary {
-  width: 100%;
   margin-top: 14px;
   background: #4f46e5;
   color: #fff;
@@ -248,7 +250,6 @@ body {
   color: #374151;
   border: 1px solid #d1d5db;
   padding: 9px 16px;
-  width: 100%;
 }
 
 .btn-outline:hover:not(:disabled) { background: #f9fafb; }
@@ -272,16 +273,12 @@ body {
   flex-wrap: wrap;
 }
 
-.score-block {
-  flex: 1;
-  min-width: 120px;
-}
+.score-block { flex: 1; min-width: 120px; }
 
 .score-value {
   font-size: 2.6rem;
   font-weight: 800;
   line-height: 1;
-  color: #22c55e;
 }
 
 .score-unit {
@@ -431,11 +428,7 @@ body {
 
 .action-btn:hover:not(:disabled) { background: #f3f4f6; border-color: #d1d5db; }
 .action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.action-btn--ghost {
-  background: transparent;
-  color: #9ca3af;
-}
+.action-btn--ghost { background: transparent; color: #9ca3af; }
 
 /* ── Section rows ── */
 .section-heading {
@@ -461,6 +454,25 @@ body {
   border: 1px solid #f3f4f6;
   border-radius: 8px;
   padding: 10px 12px;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.section-row--clickable {
+  cursor: pointer;
+}
+
+.section-row--clickable:hover {
+  background: #f0f4ff;
+  border-color: #c7d2fe;
+}
+
+.section-row--selected {
+  background: #ede9fe;
+  border-color: #a5b4fc;
+}
+
+.section-row--selected:hover {
+  background: #ede9fe;
 }
 
 .section-row-name {
@@ -478,11 +490,29 @@ body {
   line-height: 1.4;
 }
 
+.section-row-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .section-row-badge {
   font-size: 0.68rem;
   font-weight: 600;
   padding: 2px 9px;
   border-radius: 999px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.section-revised-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -546,6 +576,29 @@ body {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Section selected state (right panel) ── */
+.section-selected-state {
+  margin-top: 24px;
+  padding: 20px;
+  background: #f5f3ff;
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+}
+
+.section-selected-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #4f46e5;
+  margin-bottom: 6px;
+  text-transform: capitalize;
+}
+
+.section-selected-hint {
+  font-size: 0.82rem;
+  color: #6b7280;
+  line-height: 1.6;
+}
 
 /* ── Revision panel ── */
 .revision-section-label {
