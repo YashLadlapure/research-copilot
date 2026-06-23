@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { getSession } = require('../store');
+const { getSession, updateSession } = require('../store');
+const { refineSectionText } = require('../ai/geminiRefine');
 
-router.post('/', (req, res) => {
-  const { sessionId, sectionName, mode = 'Strict' } = req.body;
+router.post('/', async (req, res) => {
+  const { sessionId, sectionName, mode = 'balanced', apply = false } = req.body;
 
   if (!sessionId || !sectionName) {
     return res.status(400).json({ error: '"sessionId" and "sectionName" are required.' });
@@ -20,20 +21,36 @@ router.post('/', (req, res) => {
   }
 
   const sectionKey = sectionName.toLowerCase();
-  const originalText = structured[sectionKey] || `Original text for "${sectionName}" not extracted yet.`;
+  const originalText = structured[sectionKey];
 
-  const suggestion = {
-    targetSection: sectionName,
-    originalText,
-    revisedText: `${originalText} [Refined: language tightened and formalized for ${session.profile.toUpperCase()} submission.]`,
-    changeSummary: 'Minor language and clarity improvements applied.',
-    rationale: `The section was refined to better align with ${session.profile.toUpperCase()} tone and structure requirements.`,
-    safetyNote: 'No claims, citations, or numerical results were modified.',
-    mode,
-    confidence: 0.75,
-  };
+  if (!originalText) {
+    return res.status(400).json({ error: `Section "${sectionName}" not found in extracted manuscript.` });
+  }
 
-  return res.json(suggestion);
+  try {
+    const geminiResult = await refineSectionText(originalText, session.profile, mode);
+
+    const suggestion = {
+      targetSection: sectionName,
+      originalText: geminiResult.original_text || originalText,
+      revisedText: geminiResult.revised_text,
+      changeSummary: geminiResult.change_summary,
+      rationale: geminiResult.rationale,
+      safetyNote: geminiResult.safety_note,
+      mode,
+      confidence: geminiResult.confidence,
+    };
+
+    if (apply && geminiResult.revised_text) {
+      const updatedManuscript = { ...structured, [sectionKey]: geminiResult.revised_text };
+      updateSession(sessionId, { structuredManuscript: updatedManuscript });
+    }
+
+    return res.json(suggestion);
+  } catch (err) {
+    console.error('[refine-section] Error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
