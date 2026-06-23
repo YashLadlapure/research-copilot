@@ -3,10 +3,20 @@ function evaluateCompliance(structured, profileConfig) {
   const sectionStatus = [];
   const ruleChecks = [];
 
+  const implicitSections = [];
+  if (structured.title && structured.title.trim()) implicitSections.push('title');
+  if (structured.abstract && structured.abstract.trim()) implicitSections.push('abstract');
+  if (Array.isArray(structured.keywords) && structured.keywords.length > 0) implicitSections.push('keywords');
+  if (structured.referencesPresent) implicitSections.push('references');
+
+  const allDetected = [
+    ...structured.sectionsDetected.map(s => s.toLowerCase()),
+    ...implicitSections,
+  ];
+  const allMissing = structured.sectionsMissing.map(s => s.toLowerCase()).filter(s => !implicitSections.includes(s));
+
   for (const required of profileConfig.requiredSections) {
-    const detected = structured.sectionsDetected.map(s => s.toLowerCase());
-    const missing = structured.sectionsMissing.map(s => s.toLowerCase());
-    const found = detected.includes(required.toLowerCase()) && !missing.includes(required.toLowerCase());
+    const found = allDetected.includes(required.toLowerCase()) && !allMissing.includes(required.toLowerCase());
 
     ruleChecks.push({
       rule: `section_present_${required}`,
