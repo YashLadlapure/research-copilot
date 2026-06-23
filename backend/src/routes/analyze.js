@@ -5,6 +5,29 @@ const { createSession } = require('../store');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
 const { extractSections } = require('../ai/geminiClient');
 
+const KNOWN_SECTIONS = [
+  'abstract', 'introduction', 'related work', 'literature review', 'background',
+  'methodology', 'methods', 'approach', 'system design', 'system architecture',
+  'architecture', 'implementation', 'design', 'experiments', 'experimental setup',
+  'evaluation', 'results', 'results and discussion', 'discussion', 'analysis',
+  'performance', 'conclusion', 'conclusions', 'future work', 'future scope',
+  'acknowledgements', 'acknowledgments', 'references', 'bibliography',
+];
+
+function regexSectionScan(text) {
+  const found = new Set();
+  const lower = text.toLowerCase();
+  for (const sec of KNOWN_SECTIONS) {
+    const escaped = sec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(
+      `(?:^|\\n)\\s*(?:\\d+\\.?\\s*)?${escaped}\\s*(?:\\n|$)`,
+      'i'
+    );
+    if (pattern.test(lower)) found.add(sec === 'conclusions' ? 'conclusion' : sec);
+  }
+  return [...found];
+}
+
 function normalizeText(text) {
   return text.trim().replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
 }
@@ -39,7 +62,13 @@ router.post('/', async (req, res) => {
   let structuredManuscript;
   try {
     const geminiJson = await extractSections(normalizedText, profile);
-    structuredManuscript = mapToStructured(geminiJson);
+    const base = mapToStructured(geminiJson);
+
+    const regexFound = regexSectionScan(normalizedText);
+    const mergedDetected = [...new Set([...base.sectionsDetected, ...regexFound])];
+    const mergedMissing = base.sectionsMissing.filter(s => !mergedDetected.includes(s.toLowerCase()));
+
+    structuredManuscript = { ...base, sectionsDetected: mergedDetected, sectionsMissing: mergedMissing };
   } catch (err) {
     return res.status(502).json({ error: err.message });
   }
