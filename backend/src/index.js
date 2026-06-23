@@ -5,6 +5,7 @@ require('dotenv').config();
 const analyzeRouter = require('./routes/analyze');
 const refineSectionRouter = require('./routes/refineSection');
 const applySuggestionRouter = require('./routes/applySuggestion');
+const extractPdfRouter = require('./routes/extractPdf');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -19,6 +20,7 @@ app.get('/health', (req, res) => {
 app.use('/api/analyze', analyzeRouter);
 app.use('/api/refine-section', refineSectionRouter);
 app.use('/api/apply-suggestion', applySuggestionRouter);
+app.use('/api/extract-pdf', extractPdfRouter);
 
 app.listen(PORT, () => {
   console.log(`[Research Copilot] Server running on http://localhost:${PORT}`);

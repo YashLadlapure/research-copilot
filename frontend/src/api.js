@@ -32,3 +32,15 @@ export async function applySuggestion(sessionId, targetSection, revisedText) {
   if (!res.ok) throw new Error(data.error || 'Apply failed');
   return data;
 }
+
+export async function extractPdf(file) {
+  const form = new FormData();
+  form.append('pdf', file);
+  const res = await fetch(`${BASE}/api/extract-pdf`, {
+    method: 'POST',
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'PDF extraction failed');
+  return data;
+}

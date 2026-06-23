@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import './App.css';
-import { analyzeManuscript, refineSection, applySuggestion } from './api';
+import { analyzeManuscript, refineSection, applySuggestion, extractPdf } from './api';
 
 const PROFILES = [
   { value: 'springer_lncs', label: 'Springer LNCS' },
@@ -24,6 +24,7 @@ export default function App() {
   const [profile, setProfile] = useState('springer_lncs');
   const [refineMode, setRefineMode] = useState('strict');
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const [sessionId, setSessionId] = useState(null);
   const [structured, setStructured] = useState(null);
@@ -87,6 +88,43 @@ export default function App() {
     setSelectedSection(null);
   };
 
+  const handleExport = () => {
+    const profileLabel = PROFILES.find(p => p.value === profile)?.label || profile;
+    const lines = [
+      `Research Copilot — Compliance Report`,
+      `Profile: ${profileLabel}`,
+      `Readiness Score: ${report.overallScore}/100`,
+      ``,
+      `SECTION STATUS`,
+      ...(report.sectionStatus?.map(s => `${s.status === 'present' ? '✅' : '❌'} ${s.name}`) || []),
+      ``,
+      `ISSUES (${report.issues?.length ?? 0})`,
+      ...(report.issues?.map(i => `[${i.severity}] ${i.section}: ${i.problem}`) || []),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `compliance-report-${profile}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPdfLoading(true);
+    setError(null);
+    try {
+      const { text: extracted } = await extractPdf(file);
+      setText(extracted);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   return (
     <div className="app-root">
       <header className="hero">
@@ -121,6 +159,16 @@ export default function App() {
             onChange={(e) => setText(e.target.value)}
             rows={20}
           />
+
+          <label className="field-label">Or Upload PDF</label>
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={handlePdfUpload}
+            disabled={pdfLoading}
+            style={{ marginBottom: '0.5rem' }}
+          />
+          {pdfLoading && <p style={{ fontSize: '0.8rem', color: '#6b7280' }}>Extracting text from PDF…</p>}
 
           <label className="field-label">Refine Mode</label>
           <select className="select" value={refineMode} onChange={(e) => setRefineMode(e.target.value)}>
@@ -166,6 +214,10 @@ export default function App() {
                 </div>
                 <div className="score-label">Readiness Score</div>
               </div>
+
+              <button className="btn btn-secondary" onClick={handleExport} style={{ marginBottom: '1rem' }}>
+                ⬇️ Export Report
+              </button>
 
               <h3>Section Status</h3>
               <div className="section-status-list">
