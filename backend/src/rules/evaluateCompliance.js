@@ -36,7 +36,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // Abstract word count
   const abstractText = structured.abstract || '';
   const abstractWords = abstractText.trim() === '' ? 0 : abstractText.trim().split(/\s+/).length;
   const minWords = profileConfig.abstractMinWords;
@@ -73,7 +72,6 @@ function evaluateCompliance(structured, profileConfig) {
     });
   }
 
-  // Keywords check
   if (profileConfig.keywordsRequired) {
     const kwCount = Array.isArray(structured.keywords) ? structured.keywords.length : 0;
     const kwOk = kwCount >= profileConfig.keywordsMinCount && kwCount <= profileConfig.keywordsMaxCount;
@@ -103,7 +101,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // References check
   if (profileConfig.referenceSectionRequired) {
     ruleChecks.push({
       rule: 'references_present',

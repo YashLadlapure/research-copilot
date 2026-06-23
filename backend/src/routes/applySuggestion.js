@@ -2,9 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { getSession, updateSession } = require('../store');
 
-// POST /api/apply-suggestion
-// Body: { sessionId, targetSection }
-// Applies the last Gemini revised_text back into the session's structured manuscript
 router.post('/', (req, res) => {
   const { sessionId, targetSection, revisedText } = req.body;
 

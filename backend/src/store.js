@@ -1,4 +1,3 @@
-/** @type {Map<string, import('./types').ManuscriptSession>} */
 const sessions = new Map();
 
 function createSession(session) {
