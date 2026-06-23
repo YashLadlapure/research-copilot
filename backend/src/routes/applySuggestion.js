@@ -27,10 +27,25 @@ function regexSectionScan(text) {
   return [...found];
 }
 
-function rebuildStructured(structured, sectionKey, revisedText) {
-  const updated = { ...structured, [sectionKey]: revisedText };
+function parseKeywords(value) {
+  if (Array.isArray(value)) return value.map(k => k.trim()).filter(Boolean);
+  const str = String(value)
+    .replace(/^keywords?[:\s]*/i, '')
+    .replace(/^index\s+terms?[:\s]*/i, '')
+    .trim();
+  return str.split(/[,;\n]+/).map(k => k.trim()).filter(Boolean);
+}
 
-  // reconstruct full text approximation for regex scan
+function rebuildStructured(structured, sectionKey, revisedText) {
+  let updated;
+
+  if (sectionKey.toLowerCase() === 'keywords') {
+    const parsedKeywords = parseKeywords(revisedText);
+    updated = { ...structured, keywords: parsedKeywords };
+  } else {
+    updated = { ...structured, [sectionKey]: revisedText };
+  }
+
   const textParts = [
     updated.title || '',
     updated.abstract ? `Abstract\n${updated.abstract}` : '',
