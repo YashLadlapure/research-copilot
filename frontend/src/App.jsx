@@ -78,6 +78,9 @@ export default function App() {
       if (data.complianceReport) {
         setReport(data.complianceReport);
       }
+      if (suggestion.original_text && suggestion.revised_text) {
+        setText(prev => prev.replace(suggestion.original_text, suggestion.revised_text));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
