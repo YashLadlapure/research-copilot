@@ -96,7 +96,7 @@ export default function App() {
       `Readiness Score: ${report.overallScore}/100`,
       ``,
       `SECTION STATUS`,
-      ...(report.sectionStatus?.map(s => `${s.status === 'present' ? '✅' : '❌'} ${s.name}`) || []),
+      ...(report.sectionStatus?.map(s => `${s.status === 'Good' ? '✅' : '❌'} ${s.name}`) || []),
       ``,
       `ISSUES (${report.issues?.length ?? 0})`,
       ...(report.issues?.map(i => `[${i.severity}] ${i.section}: ${i.problem}`) || []),
@@ -230,10 +230,10 @@ export default function App() {
                       <div
                         key={s.name}
                         className={`section-chip ${
-                          s.status === 'present' ? 'section-chip--found' : 'section-chip--missing'
+                          s.status === 'Good' ? 'section-chip--found' : 'section-chip--missing'
                         }`}
                       >
-                        {s.status === 'present' ? '✅' : '❌'} {s.name}
+                        {s.status === 'Good' ? '✅' : '❌'} {s.name}
                       </div>
                     ))
                   : (
