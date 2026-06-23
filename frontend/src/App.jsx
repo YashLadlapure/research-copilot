@@ -3,8 +3,8 @@ import './App.css';
 import { analyzeManuscript, refineSection, applySuggestion, extractPdf } from './api';
 
 const PROFILES = [
-  { value: 'springer_lncs', label: 'Springer LNCS' },
-  { value: 'ieee_conference', label: 'IEEE Conference' },
+  { value: 'lncs', label: 'Springer LNCS' },
+  { value: 'ieee', label: 'IEEE Conference' },
 ];
 
 const SEVERITY_COLOR = {
@@ -21,7 +21,7 @@ function scoreColor(score) {
 
 export default function App() {
   const [text, setText] = useState('');
-  const [profile, setProfile] = useState('springer_lncs');
+  const [profile, setProfile] = useState('lncs');
   const [refineMode, setRefineMode] = useState('strict');
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -141,7 +141,6 @@ export default function App() {
       )}
 
       <div className="main-grid">
-        {/* Left — manuscript input */}
         <section className="panel panel-left">
           <h2>Manuscript</h2>
 
@@ -197,7 +196,6 @@ export default function App() {
           </p>
         </section>
 
-        {/* Center — compliance results */}
         <section className="panel panel-center">
           <h2>Compliance Dashboard</h2>
 
@@ -289,7 +287,6 @@ export default function App() {
           )}
         </section>
 
-        {/* Right — diff and suggestion review */}
         <section className="panel panel-right">
           <h2>Revision Preview</h2>
 
