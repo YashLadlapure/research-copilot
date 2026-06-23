@@ -3,7 +3,6 @@ function evaluateCompliance(structured, profileConfig) {
   const sectionStatus = [];
   const ruleChecks = [];
 
-  // Check each required section
   for (const required of profileConfig.requiredSections) {
     const detected = structured.sectionsDetected.map(s => s.toLowerCase());
     const missing = structured.sectionsMissing.map(s => s.toLowerCase());
@@ -21,23 +20,23 @@ function evaluateCompliance(structured, profileConfig) {
         section: required,
         severity: 'Critical',
         problem: `Required section "${required}" was not detected in the manuscript.`,
-        action: `Add a clearly labeled "${required}" section before submission.`,
+        recommended_action: `Add a clearly labeled "${required}" section before submission.`,
       });
       sectionStatus.push({
-        section: required,
+        name: required,
         status: 'Critical',
         summary: `"${required}" section is missing.`,
       });
     } else {
       sectionStatus.push({
-        section: required,
+        name: required,
         status: 'Good',
         summary: `"${required}" section detected.`,
       });
     }
   }
 
-  // Abstract word count check
+  // Abstract word count
   const abstractText = structured.abstract || '';
   const abstractWords = abstractText.trim() === '' ? 0 : abstractText.trim().split(/\s+/).length;
   const minWords = profileConfig.abstractMinWords;
@@ -56,21 +55,21 @@ function evaluateCompliance(structured, profileConfig) {
       section: 'abstract',
       severity: 'Critical',
       problem: 'Abstract is empty or could not be extracted.',
-      action: 'Ensure the abstract is clearly labeled and contains content.',
+      recommended_action: 'Ensure the abstract is clearly labeled and contains content.',
     });
   } else if (abstractWords > maxWords) {
     issues.push({
       section: 'abstract',
       severity: 'Critical',
       problem: `Abstract is ${abstractWords} words, exceeding the ${profileConfig.name} limit of ${maxWords} words.`,
-      action: `Shorten the abstract to ${maxWords} words or fewer.`,
+      recommended_action: `Shorten the abstract to ${maxWords} words or fewer.`,
     });
   } else if (abstractWords < minWords) {
     issues.push({
       section: 'abstract',
       severity: 'Review',
       problem: `Abstract is ${abstractWords} words, below the ${profileConfig.name} guideline of at least ${minWords} words.`,
-      action: `Expand the abstract to at least ${minWords} words.`,
+      recommended_action: `Expand the abstract to at least ${minWords} words.`,
     });
   }
 
@@ -78,32 +77,33 @@ function evaluateCompliance(structured, profileConfig) {
   if (profileConfig.keywordsRequired) {
     const kwCount = Array.isArray(structured.keywords) ? structured.keywords.length : 0;
     const kwOk = kwCount >= profileConfig.keywordsMinCount && kwCount <= profileConfig.keywordsMaxCount;
+    const kwLabel = profileConfig.keywordsLabel || 'Keywords';
 
     ruleChecks.push({
       rule: 'keywords_count',
       passed: kwOk,
       observedValue: kwCount,
-      expected: `${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} keywords`,
+      expected: `${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel}`,
     });
 
     if (kwCount === 0) {
       issues.push({
         section: 'keywords',
         severity: 'Critical',
-        problem: 'No keywords were detected.',
-        action: `Add ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} keywords after the abstract.`,
+        problem: `No ${kwLabel} were detected.`,
+        recommended_action: `Add ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel} directly after the abstract.`,
       });
     } else if (!kwOk) {
       issues.push({
         section: 'keywords',
         severity: 'Review',
-        problem: `${kwCount} keyword(s) detected. ${profileConfig.name} expects ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount}.`,
-        action: `Adjust keywords to meet the ${profileConfig.name} requirement.`,
+        problem: `${kwCount} ${kwLabel} detected. ${profileConfig.name} expects ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount}.`,
+        recommended_action: `Adjust ${kwLabel} to meet the ${profileConfig.name} requirement.`,
       });
     }
   }
 
-  // References presence check
+  // References check
   if (profileConfig.referenceSectionRequired) {
     ruleChecks.push({
       rule: 'references_present',
@@ -117,12 +117,11 @@ function evaluateCompliance(structured, profileConfig) {
         section: 'references',
         severity: 'Critical',
         problem: 'No references section was detected.',
-        action: 'Add a references section with properly formatted citations.',
+        recommended_action: `Add a references section using ${profileConfig.referenceStyleNote || profileConfig.referenceStyle + ' style'}.`,
       });
     }
   }
 
-  // Compute score
   const criticalCount = issues.filter(i => i.severity === 'Critical').length;
   const reviewCount = issues.filter(i => i.severity === 'Review').length;
   const overallScore = Math.max(0, 100 - criticalCount * 20 - reviewCount * 8);
@@ -132,7 +131,7 @@ function evaluateCompliance(structured, profileConfig) {
     issues,
     sectionStatus,
     ruleChecks,
-    recommendedActions: issues.map(i => i.action),
+    recommendedActions: issues.map(i => i.recommended_action),
   };
 }
 

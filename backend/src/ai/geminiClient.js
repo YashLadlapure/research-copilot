@@ -1,9 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// gemini-2.0-flash-lite was shut down June 1, 2026. Use gemini-3.1-flash-lite as default.
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 const EXTRACTION_SCHEMA = `{
   "title": "string",
@@ -15,20 +13,27 @@ const EXTRACTION_SCHEMA = `{
 }`;
 
 function buildExtractionPrompt(text, profile) {
-  return `You are a research manuscript analyzer. Analyze the following research paper text and extract its structure.
+  return `You are a research manuscript structure analyzer.
 
 Target publication profile: ${profile.toUpperCase()}
+
+The manuscript below may be plain text extracted from a PDF. Section headings may appear as:
+- Numbered headings: "1 Introduction", "2. Methodology", "3 Results"
+- Unnumbered headings: "Introduction", "Abstract", "Conclusion"
+- Bold or ALL-CAPS labels without markdown formatting
+- "Keywords:" or "Index Terms:" inline before the keyword list
+- "Abstract" as a standalone line or paragraph label
 
 Extract and return ONLY a valid JSON object with exactly these keys:
 ${EXTRACTION_SCHEMA}
 
 Rules:
-- "title": the paper title as a string, or empty string if not found
-- "abstract": the full abstract text as a string, or empty string if not found
-- "keywords": array of keyword strings, or empty array if not found
-- "sections_detected": array of section names that are clearly present (e.g. ["introduction", "methodology", "conclusion"])
-- "sections_missing": array of section names that are expected but not found
-- "references_present": true if a references or bibliography section exists, false otherwise
+- "title": the paper title (usually the first prominent line), or empty string
+- "abstract": full abstract text as a single string, or empty string if not found
+- "keywords": array of keyword strings extracted from the Keywords or Index Terms line, or empty array
+- "sections_detected": lowercase array of section names clearly present, e.g. ["introduction", "methodology", "conclusion"]
+- "sections_missing": lowercase array of sections expected for ${profile.toUpperCase()} but not found
+- "references_present": true if a References or Bibliography section exists, false otherwise
 - Do NOT invent content. If a section is absent, list it in sections_missing.
 - Return JSON only. No explanation, no markdown, no code blocks.
 
@@ -39,7 +44,8 @@ ${text.slice(0, 12000)}`;
 function buildRetryPrompt(text) {
   return `Extract the structure of this research paper as a JSON object.
 Return ONLY raw JSON with no markdown, no code fences, no explanation.
-Required keys: title (string), abstract (string), keywords (array of strings), sections_detected (array of strings), sections_missing (array of strings), references_present (boolean).
+Required keys: title (string), abstract (string), keywords (array of strings), sections_detected (array of lowercase strings), sections_missing (array of lowercase strings), references_present (boolean).
+Note: Section headings may be numbered like "1 Introduction" or "2. Methodology" — detect them.
 
 Manuscript:
 ${text.slice(0, 8000)}`;
@@ -48,7 +54,6 @@ ${text.slice(0, 8000)}`;
 async function extractSections(text, profile) {
   const model = genAI.getGenerativeModel({ model: MODEL });
 
-  // First attempt
   try {
     const result = await model.generateContent(buildExtractionPrompt(text, profile));
     const raw = result.response.text().trim();
@@ -57,12 +62,10 @@ async function extractSections(text, profile) {
   } catch (firstError) {
     console.error('[Gemini] First attempt error:', firstError?.message || firstError);
 
-    // Check for quota exhaustion — no point retrying with same model
     if (firstError?.message?.includes('429') || firstError?.message?.includes('quota')) {
       throw new Error('Gemini quota exceeded. Please check your API key and model quota at https://ai.dev/rate-limit');
     }
 
-    // Retry with stricter prompt for other errors
     try {
       const retryResult = await model.generateContent(buildRetryPrompt(text));
       const raw = retryResult.response.text().trim();
