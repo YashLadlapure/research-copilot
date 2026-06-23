@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { getProfileConfig } = require('../profiles/index');
-const { createSession } = require('../store');
+const { createSession, getSession } = require('../store');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
 const { extractSections } = require('../ai/geminiClient');
 
 const KNOWN_SECTIONS = [
-  'abstract', 'introduction', 'related work', 'literature review', 'background',
+   'abstract', 'introduction', 'related work', 'literature review', 'background',
   'methodology', 'methods', 'approach', 'system design', 'system architecture',
   'architecture', 'implementation', 'design', 'experiments', 'experimental setup',
   'evaluation', 'results', 'results and discussion', 'discussion', 'analysis',
@@ -44,7 +44,7 @@ function mapToStructured(geminiJson) {
 }
 
 router.post('/', async (req, res) => {
-  const { text, profile } = req.body;
+  const { text, profile, sessionId: existingSessionId } = req.body;
 
   if (!text || !profile) {
     return res.status(400).json({ error: 'Both "text" and "profile" are required.' });
@@ -55,6 +55,19 @@ router.post('/', async (req, res) => {
     profileConfig = getProfileConfig(profile);
   } catch (err) {
     return res.status(400).json({ error: err.message });
+  }
+
+  // if client passes existing sessionId and it has applied revisions, re-score from that session
+  if (existingSessionId) {
+    const existing = getSession(existingSessionId);
+    if (existing && existing.structuredManuscript) {
+      const newReport = evaluateCompliance(existing.structuredManuscript, profileConfig);
+      return res.json({
+        sessionId: existingSessionId,
+        structuredManuscript: existing.structuredManuscript,
+        complianceReport: newReport,
+      });
+    }
   }
 
   const normalizedText = normalizeText(text);

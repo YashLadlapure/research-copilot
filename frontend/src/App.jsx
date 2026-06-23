@@ -13,6 +13,8 @@ const SEVERITY_COLOR = {
   Good: '#22c55e',
 };
 
+const NON_REFINABLE = ['references', 'bibliography'];
+
 function scoreColor(score) {
   if (score >= 75) return '#22c55e';
   if (score >= 50) return '#f59e0b';
@@ -29,10 +31,26 @@ export default function App() {
   const [sessionId, setSessionId] = useState(null);
   const [structured, setStructured] = useState(null);
   const [report, setReport] = useState(null);
+  const [revisedSections, setRevisedSections] = useState({});
 
   const [selectedSection, setSelectedSection] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
   const [error, setError] = useState(null);
+
+  const buildAnalyzeText = (baseText, revisions) => {
+    if (!revisions || Object.keys(revisions).length === 0) return baseText;
+    let merged = baseText;
+    for (const [section, revised] of Object.entries(revisions)) {
+      if (section.toLowerCase() === 'keywords') continue;
+      merged = merged.replace(new RegExp(
+        revisions[section + '__original']
+          ? revisions[section + '__original'].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          : '.^',
+        's'
+      ), revised);
+    }
+    return merged;
+  };
 
   const handleAnalyze = async () => {
     if (!text.trim()) return;
@@ -48,6 +66,7 @@ export default function App() {
       setSessionId(data.sessionId);
       setStructured(data.structuredManuscript);
       setReport(data.complianceReport);
+      setRevisedSections({});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -78,14 +97,41 @@ export default function App() {
       if (data.complianceReport) {
         setReport(data.complianceReport);
       }
-      if (suggestion.original_text && suggestion.revised_text) {
-        setText(prev => prev.replace(suggestion.original_text, suggestion.revised_text));
+      // store revision so re-analyze can use the updated session
+      setRevisedSections(prev => ({
+        ...prev,
+        [selectedSection]: suggestion.revised_text,
+        [selectedSection + '__original']: suggestion.original_text,
+      }));
+      // also update structured in state so refine reads correct text next time
+      if (data.structuredManuscript) {
+        setStructured(data.structuredManuscript);
       }
     } catch (err) {
       setError(err.message);
     } finally {
       setSuggestion(null);
       setSelectedSection(null);
+    }
+  };
+
+  const handleReanalyze = async () => {
+    if (!sessionId || !text.trim()) return;
+    setLoading(true);
+    setError(null);
+    setSuggestion(null);
+    setSelectedSection(null);
+    try {
+      // re-analyze the SAME session — backend already has updated structuredManuscript
+      // just call analyze with the session's current text (backend will re-score from session)
+      const data = await analyzeManuscript(text, profile, sessionId);
+      setSessionId(data.sessionId);
+      setStructured(data.structuredManuscript);
+      setReport(data.complianceReport);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -131,6 +177,8 @@ export default function App() {
       e.target.value = '';
     }
   };
+
+  const hasRevisions = Object.keys(revisedSections).filter(k => !k.endsWith('__original')).length > 0;
 
   return (
     <div className="app-root">
@@ -195,6 +243,17 @@ export default function App() {
           >
             {loading && !selectedSection ? '⏳ Analyzing…' : '🔍 Analyze Manuscript'}
           </button>
+
+          {hasRevisions && (
+            <button
+              className="btn btn-secondary"
+              onClick={handleReanalyze}
+              disabled={loading}
+              style={{ marginTop: '0.5rem' }}
+            >
+              🔄 Re-score with Applied Changes
+            </button>
+          )}
 
           <p className="trust-note">
             ⚠️ Do not upload sensitive unpublished work to public deployments.
@@ -279,13 +338,15 @@ export default function App() {
                     {issue.recommended_action && (
                       <p className="issue-action">💡 {issue.recommended_action}</p>
                     )}
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => handleRefine(issue.section)}
-                      disabled={loading}
-                    >
-                      ✨ Refine Section
-                    </button>
+                    {!NON_REFINABLE.includes(issue.section?.toLowerCase()) && (
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => handleRefine(issue.section)}
+                        disabled={loading}
+                      >
+                        ✨ Refine Section
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

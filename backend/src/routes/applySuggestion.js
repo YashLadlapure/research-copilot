@@ -114,7 +114,12 @@ router.post('/', (req, res) => {
     complianceReport: newReport,
   });
 
-  return res.json({ ok: true, applied: targetSection, complianceReport: newReport });
+  return res.json({
+    ok: true,
+    applied: targetSection,
+    complianceReport: newReport,
+    structuredManuscript: updatedManuscript,
+  });
 });
 
 module.exports = router;
