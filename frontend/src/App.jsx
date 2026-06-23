@@ -122,6 +122,7 @@ export default function App() {
       setError(err.message);
     } finally {
       setPdfLoading(false);
+      e.target.value = '';
     }
   };
 
@@ -160,10 +161,15 @@ export default function App() {
             rows={20}
           />
 
-          <label className="field-label">Or Upload PDF</label>
+          <label className="field-label">
+            Or Upload PDF
+            <span style={{ color: '#6b7280', fontSize: '0.75rem', marginLeft: '0.4rem' }}>
+              (PDF only — convert .docx to PDF first)
+            </span>
+          </label>
           <input
             type="file"
-            accept=".pdf"
+            accept=".pdf,application/pdf"
             onChange={handlePdfUpload}
             disabled={pdfLoading}
             style={{ marginBottom: '0.5rem' }}
