@@ -1,294 +1,280 @@
-import { useState } from 'react'
-import './App.css'
-
-const API_BASE = 'http://localhost:4000/api'
+import { useState } from 'react';
+import './App.css';
 
 const PROFILES = [
-  { value: 'lncs', label: 'Springer LNCS' },
-  { value: 'ieee', label: 'IEEE Conference' },
-]
+  { value: 'springer_lncs', label: 'Springer LNCS' },
+  { value: 'ieee_conference', label: 'IEEE Conference' },
+];
 
 const SEVERITY_COLOR = {
   Critical: '#ef4444',
   Review: '#f59e0b',
   Good: '#22c55e',
-}
-
-function SeverityBadge({ level }) {
-  return (
-    <span style={{
-      background: SEVERITY_COLOR[level] || '#6b7280',
-      color: '#fff',
-      borderRadius: '4px',
-      padding: '2px 10px',
-      fontSize: '12px',
-      fontWeight: 700,
-      letterSpacing: '0.5px',
-    }}>{level}</span>
-  )
-}
-
-function ScoreCard({ score }) {
-  const color = score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
-  return (
-    <div className="score-card" style={{ borderColor: color }}>
-      <div className="score-number" style={{ color }}>{score}</div>
-      <div className="score-label">Readiness Score</div>
-    </div>
-  )
-}
-
-function IssueCard({ issue }) {
-  return (
-    <div className="issue-card" style={{ borderLeft: `4px solid ${SEVERITY_COLOR[issue.severity] || '#6b7280'}` }}>
-      <div className="issue-header">
-        <span className="issue-section">{issue.section}</span>
-        <SeverityBadge level={issue.severity} />
-      </div>
-      <p className="issue-problem">{issue.problem}</p>
-      <p className="issue-why">{issue.whyItMatters}</p>
-      {issue.recommendedAction && (
-        <p className="issue-action">💡 {issue.recommendedAction}</p>
-      )}
-    </div>
-  )
-}
-
-function DiffViewer({ original, revised, onAccept, onReject }) {
-  return (
-    <div className="diff-viewer">
-      <div className="diff-col">
-        <div className="diff-label original-label">Original</div>
-        <div className="diff-text">{original}</div>
-      </div>
-      <div className="diff-col">
-        <div className="diff-label revised-label">Suggested</div>
-        <div className="diff-text revised">{revised}</div>
-      </div>
-      <div className="diff-actions">
-        <button className="btn-accept" onClick={onAccept}>✅ Apply</button>
-        <button className="btn-reject" onClick={onReject}>❌ Reject</button>
-      </div>
-    </div>
-  )
-}
+};
 
 export default function App() {
-  const [text, setText] = useState('')
-  const [profile, setProfile] = useState('lncs')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState(null)
-  const [activeSection, setActiveSection] = useState(null)
-  const [refining, setRefining] = useState(false)
-  const [suggestion, setSuggestion] = useState(null)
-  const [refineMode, setRefineMode] = useState('strict')
-  const [appliedSections, setAppliedSections] = useState({})
+  const [text, setText] = useState('');
+  const [profile, setProfile] = useState('springer_lncs');
+  const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
+  const [structured, setStructured] = useState(null);
+  const [report, setReport] = useState(null);
+  const [selectedSection, setSelectedSection] = useState(null);
+  const [currentSuggestion, setCurrentSuggestion] = useState(null);
+  const [error, setError] = useState(null);
 
-  async function handleAnalyze() {
-    if (!text.trim()) { setError('Please paste your manuscript text.'); return }
-    setLoading(true); setError(''); setResult(null); setSuggestion(null); setActiveSection(null)
+  const handleAnalyze = async () => {
+    if (!text.trim()) return;
+    setLoading(true);
+    setError(null);
+    setReport(null);
+    setStructured(null);
+    setCurrentSuggestion(null);
+    setSelectedSection(null);
     try {
-      const res = await fetch(`${API_BASE}/analyze`, {
+      const res = await fetch('http://localhost:4000/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, profile }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Analysis failed')
-      setResult(data)
-    } catch (e) {
-      setError(e.message)
+        body: JSON.stringify({ manuscriptText: text, profile }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Analysis failed');
+      setSessionId(data.sessionId);
+      setStructured(data.structured);
+      setReport(data.report);
+    } catch (err) {
+      setError(err.message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  async function handleRefine(section) {
-    if (!result?.sessionId) return
-    setActiveSection(section); setRefining(true); setSuggestion(null)
+  const handleRefine = async (section) => {
+    if (!sessionId) return;
+    setSelectedSection(section);
+    setCurrentSuggestion(null);
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/refine-section`, {
+      const res = await fetch('http://localhost:4000/api/refine-section', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: result.sessionId, targetSection: section, mode: refineMode }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Refinement failed')
-      setSuggestion(data)
-    } catch (e) {
-      setError(e.message)
+        body: JSON.stringify({ sessionId, targetSection: section, mode: 'strict' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Refinement failed');
+      setCurrentSuggestion(data.suggestion);
+    } catch (err) {
+      setError(err.message);
     } finally {
-      setRefining(false)
+      setLoading(false);
     }
-  }
+  };
 
-  function handleAccept() {
-    if (!suggestion) return
-    setAppliedSections(prev => ({ ...prev, [activeSection]: suggestion.revisedText }))
-    setSuggestion(null)
-  }
+  const handleApply = async () => {
+    if (!sessionId || !currentSuggestion) return;
+    try {
+      await fetch('http://localhost:4000/api/apply-suggestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, targetSection: selectedSection }),
+      });
+      setCurrentSuggestion(null);
+      setSelectedSection(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
-  function handleReject() { setSuggestion(null) }
-
-  const issues = result?.complianceReport?.issues || []
-  const criticalCount = issues.filter(i => i.severity === 'Critical').length
-  const reviewCount = issues.filter(i => i.severity === 'Review').length
+  const scoreColor = (score) => {
+    if (score >= 75) return '#22c55e';
+    if (score >= 50) return '#f59e0b';
+    return '#ef4444';
+  };
 
   return (
-    <div className="app">
-      {/* Header */}
-      <header className="app-header">
-        <div className="header-inner">
-          <div className="logo-block">
-            <span className="logo-icon">📄</span>
-            <span className="logo-text">Research <span className="logo-accent">Copilot</span></span>
-          </div>
-          <span className="header-tagline">AI-powered publication compliance assistant</span>
-        </div>
+    <div className="app-root">
+      {/* Hero */}
+      <header className="hero">
+        <h1>🔬 Research Copilot</h1>
+        <p>AI-assisted publication compliance and safe manuscript refinement</p>
       </header>
 
-      <main className="app-main">
-        {/* Input Panel */}
-        <section className="input-panel">
-          <h2 className="panel-title">Manuscript Input</h2>
+      {error && (
+        <div className="error-banner">
+          ⚠️ {error}
+          <button onClick={() => setError(null)}>✕</button>
+        </div>
+      )}
 
-          <div className="profile-selector">
-            <label>Target Publication Profile</label>
-            <div className="profile-buttons">
-              {PROFILES.map(p => (
-                <button
-                  key={p.value}
-                  className={`profile-btn ${profile === p.value ? 'active' : ''}`}
-                  onClick={() => setProfile(p.value)}
-                >{p.label}</button>
-              ))}
-            </div>
-          </div>
+      <div className="main-grid">
+        {/* LEFT — Input */}
+        <section className="panel panel-left">
+          <h2>Manuscript</h2>
 
-          <div className="mode-selector">
-            <label>Refinement Mode</label>
-            <select value={refineMode} onChange={e => setRefineMode(e.target.value)} className="mode-select">
-              <option value="strict">Strict — Preserve Meaning</option>
-              <option value="balanced">Balanced Refinement</option>
-              <option value="aggressive">Aggressive Cleanup</option>
-            </select>
-          </div>
+          <label className="field-label">Publication Profile</label>
+          <select
+            className="select"
+            value={profile}
+            onChange={(e) => setProfile(e.target.value)}
+          >
+            {PROFILES.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
 
+          <label className="field-label">Paste Manuscript Text</label>
           <textarea
-            className="manuscript-input"
-            placeholder="Paste your manuscript text here..."
+            className="textarea"
+            placeholder="Paste your research manuscript here…"
             value={text}
-            onChange={e => setText(e.target.value)}
-            rows={14}
+            onChange={(e) => setText(e.target.value)}
+            rows={20}
           />
 
-          <div className="input-footer">
-            <span className="char-count">{text.length} characters</span>
-            <button className="btn-analyze" onClick={handleAnalyze} disabled={loading}>
-              {loading ? '⏳ Analyzing...' : '🔍 Analyze Manuscript'}
-            </button>
-          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleAnalyze}
+            disabled={loading || !text.trim()}
+          >
+            {loading ? '⏳ Analyzing…' : '🔍 Analyze Manuscript'}
+          </button>
 
-          {error && <div className="error-banner">⚠️ {error}</div>}
+          <p className="trust-note">
+            ⚠️ Do not upload sensitive unpublished work to public deployments.
+            Author remains responsible for final review.
+          </p>
         </section>
 
-        {/* Results Panel */}
-        {result && (
-          <section className="results-panel">
-            {/* Score + Summary */}
-            <div className="results-top">
-              <ScoreCard score={result.complianceReport?.overallScore ?? 0} />
-              <div className="results-summary">
-                <h2 className="panel-title">Compliance Report</h2>
-                <p className="profile-tag">Profile: <strong>{PROFILES.find(p=>p.value===profile)?.label}</strong></p>
-                <div className="issue-counts">
-                  <span className="count-badge critical">{criticalCount} Critical</span>
-                  <span className="count-badge review">{reviewCount} Review</span>
-                  <span className="count-badge good">{issues.filter(i=>i.severity==='Good').length} Good</span>
-                </div>
-              </div>
-            </div>
+        {/* CENTER — Compliance Dashboard */}
+        <section className="panel panel-center">
+          <h2>Compliance Dashboard</h2>
 
-            {/* Section Status */}
-            <div className="section-status">
+          {!report && !loading && (
+            <div className="empty-state">Run analysis to see your compliance report.</div>
+          )}
+
+          {loading && (
+            <div className="loading-state">
+              <div className="spinner" />
+              <p>Processing manuscript…</p>
+            </div>
+          )}
+
+          {report && (
+            <>
+              {/* Score Card */}
+              <div className="score-card" style={{ borderColor: scoreColor(report.overallScore) }}>
+                <div className="score-value" style={{ color: scoreColor(report.overallScore) }}>
+                  {report.overallScore}<span className="score-unit">/100</span>
+                </div>
+                <div className="score-label">Readiness Score</div>
+              </div>
+
+              {/* Section Status */}
               <h3>Section Status</h3>
-              <div className="section-chips">
-                {Object.entries(result.complianceReport?.sectionStatus || {}).map(([sec, info]) => (
+              <div className="section-status-list">
+                {structured?.sections_detected?.map((sec) => (
+                  <div key={sec} className="section-chip section-chip--found">✅ {sec}</div>
+                ))}
+                {structured?.sections_missing?.map((sec) => (
+                  <div key={sec} className="section-chip section-chip--missing">❌ {sec}</div>
+                ))}
+              </div>
+
+              {/* Issues */}
+              <h3>Issues ({report.issues?.length || 0})</h3>
+              <div className="issues-list">
+                {report.issues?.length === 0 && (
+                  <div className="issue-card issue-card--good">🎉 No issues found!</div>
+                )}
+                {report.issues?.map((issue, i) => (
                   <div
-                    key={sec}
-                    className={`section-chip ${info.status?.toLowerCase()}`}
-                    onClick={() => handleRefine(sec)}
-                    title={`Click to refine ${sec}`}
+                    key={i}
+                    className="issue-card"
+                    style={{ borderLeftColor: SEVERITY_COLOR[issue.severity] }}
                   >
-                    <span className="chip-icon">
-                      {info.status === 'Good' ? '✅' : info.status === 'Critical' ? '🔴' : '🟡'}
-                    </span>
-                    <span className="chip-name">{sec}</span>
-                    {appliedSections[sec] && <span className="chip-applied">✨</span>}
+                    <div className="issue-header">
+                      <span
+                        className="severity-badge"
+                        style={{ background: SEVERITY_COLOR[issue.severity] }}
+                      >
+                        {issue.severity}
+                      </span>
+                      <span className="issue-section">{issue.section}</span>
+                    </div>
+                    <p className="issue-problem">{issue.problem}</p>
+                    {issue.recommended_action && (
+                      <p className="issue-action">💡 {issue.recommended_action}</p>
+                    )}
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => handleRefine(issue.section)}
+                      disabled={loading}
+                    >
+                      ✨ Refine Section
+                    </button>
                   </div>
                 ))}
               </div>
-              <p className="refine-hint">💡 Click any section to generate a safe AI refinement suggestion</p>
+            </>
+          )}
+        </section>
+
+        {/* RIGHT — Revision Preview */}
+        <section className="panel panel-right">
+          <h2>Revision Preview</h2>
+
+          {!currentSuggestion && (
+            <div className="empty-state">
+              {selectedSection
+                ? '⏳ Generating suggestion…'
+                : 'Click "Refine Section" on an issue to see suggestions.'}
             </div>
+          )}
 
-            {/* Issues */}
-            {issues.length > 0 && (
-              <div className="issues-list">
-                <h3>Detected Issues</h3>
-                {issues.map((issue, i) => <IssueCard key={i} issue={issue} />)}
+          {currentSuggestion && (
+            <>
+              <div className="diff-header">
+                <span className="diff-section-label">Section: <strong>{currentSuggestion.target_section}</strong></span>
+                <span className="diff-mode-label">Mode: {currentSuggestion.mode || 'strict'}</span>
               </div>
-            )}
 
-            {/* Diff Viewer */}
-            {refining && (
-              <div className="loading-refine">⏳ Generating safe refinement for <strong>{activeSection}</strong>...</div>
-            )}
-            {suggestion && !refining && (
-              <div className="suggestion-block">
-                <h3>Refinement Suggestion — <em>{activeSection}</em></h3>
-                <div className="suggestion-meta">
-                  <span>📋 {suggestion.changeSummary}</span>
-                  <span>🛡️ {suggestion.safetyNote}</span>
+              <div className="diff-grid">
+                <div className="diff-col diff-col--original">
+                  <div className="diff-col-title">Original</div>
+                  <pre className="diff-text">{currentSuggestion.original_text}</pre>
                 </div>
-                <DiffViewer
-                  original={suggestion.originalText}
-                  revised={suggestion.revisedText}
-                  onAccept={handleAccept}
-                  onReject={handleReject}
-                />
-                <p className="rationale">💬 <strong>Rationale:</strong> {suggestion.rationale}</p>
+                <div className="diff-col diff-col--revised">
+                  <div className="diff-col-title">Suggested</div>
+                  <pre className="diff-text">{currentSuggestion.revised_text}</pre>
+                </div>
               </div>
-            )}
 
-            {/* Export */}
-            <div className="export-block">
-              <h3>Export</h3>
-              <button className="btn-export" onClick={() => {
-                const sections = result.complianceReport?.sectionStatus || {}
-                const lines = [
-                  `Research Copilot — Compliance Checklist`,
-                  `Profile: ${PROFILES.find(p=>p.value===profile)?.label}`,
-                  `Readiness Score: ${result.complianceReport?.overallScore ?? 0}/100`,
-                  ``,
-                  `ISSUES:`,
-                  ...issues.map(i => `[${i.severity}] ${i.section}: ${i.problem}`),
-                  ``,
-                  `SECTION STATUS:`,
-                  ...Object.entries(sections).map(([s, v]) => `${s}: ${v.status} — ${v.summary}`),
-                  ``,
-                  `NOTE: Author remains responsible for final content and submission decisions.`,
-                ]
-                const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url; a.download = 'compliance-checklist.txt'; a.click()
-              }}>⬇️ Download Checklist</button>
-              <p className="disclaimer">⚠️ AI suggestions are for formatting and structure guidance only. Author remains responsible for all content and submission decisions.</p>
-            </div>
-          </section>
-        )}
-      </main>
+              <div className="suggestion-meta">
+                {currentSuggestion.rationale && (
+                  <p><strong>Rationale:</strong> {currentSuggestion.rationale}</p>
+                )}
+                {currentSuggestion.safety_note && (
+                  <p className="safety-note">🛡️ <strong>Safety:</strong> {currentSuggestion.safety_note}</p>
+                )}
+                {currentSuggestion.confidence !== undefined && (
+                  <p><strong>Confidence:</strong> {Math.round(currentSuggestion.confidence * 100)}%</p>
+                )}
+              </div>
+
+              <div className="revision-actions">
+                <button className="btn btn-success" onClick={handleApply}>✅ Apply</button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => { setCurrentSuggestion(null); setSelectedSection(null); }}
+                >
+                  ✕ Reject
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
     </div>
-  )
+  );
 }
