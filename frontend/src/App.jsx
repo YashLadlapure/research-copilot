@@ -39,12 +39,27 @@ function scoreSubtitle(score, issues) {
   return `${critical.length} critical and ${review.length} review issues found.`;
 }
 
-function getActionButtons(issue, onRefine, loading) {
+function recalcScore(issues) {
+  const criticalCount = issues.filter(i => i.severity === 'Critical').length;
+  const reviewCount = issues.filter(i => i.severity === 'Review').length;
+  return Math.max(0, 100 - criticalCount * 20 - reviewCount * 5);
+}
+
+function getActionButtons(issue, onRefine, loading, onDismiss) {
   const sec = (issue.section || '').toLowerCase();
   if (NON_REFINABLE.includes(sec)) {
     return (
-      <div className="issue-manual-note">
-        ⚠️ Must be fixed manually in your document — references cannot be auto-edited to avoid citation errors.
+      <div className="issue-actions">
+        <div className="issue-manual-note">
+          ⚠️ Must be fixed manually — references cannot be auto-edited to avoid citation errors.
+        </div>
+        <button
+          className="action-btn action-btn--ghost"
+          style={{ marginTop: '6px', fontSize: '0.75rem' }}
+          onClick={() => onDismiss(issue)}
+        >
+          ✓ Mark as fixed manually
+        </button>
       </div>
     );
   }
@@ -73,6 +88,7 @@ export default function App() {
   const [report, setReport] = useState(null);
   const [revisedSections, setRevisedSections] = useState({});
   const [bonusTips, setBonusTips] = useState(null);
+  const [dismissedIssues, setDismissedIssues] = useState([]);
 
   const [selectedSection, setSelectedSection] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
@@ -91,6 +107,7 @@ export default function App() {
     setActiveTab('Overview');
     setBonusTips(null);
     setRevisedSections({});
+    setDismissedIssues([]);
     try {
       const data = await analyzeManuscript(text, profile);
       setSessionId(data.sessionId);
@@ -144,7 +161,18 @@ export default function App() {
     if (!sessionId || !suggestion) return;
     try {
       const data = await applySuggestion(sessionId, selectedSection, suggestion.revised_text);
-      if (data.complianceReport) setReport(data.complianceReport);
+      if (data.complianceReport) {
+        // filter out any dismissed issues from the fresh report before setting
+        const freshIssues = (data.complianceReport.issues || []).filter(
+          issue => !dismissedIssues.some(d => d.section === issue.section && d.problem === issue.problem)
+        );
+        const updatedReport = {
+          ...data.complianceReport,
+          issues: freshIssues,
+          overallScore: recalcScore(freshIssues),
+        };
+        setReport(updatedReport);
+      }
       if (data.structuredManuscript) setStructured(data.structuredManuscript);
       setRevisedSections(prev => ({ ...prev, [selectedSection]: suggestion.revised_text }));
     } catch (err) {
@@ -153,6 +181,17 @@ export default function App() {
       setSuggestion(null);
       setSelectedSection(null);
     }
+  };
+
+  const handleDismissIssue = (issue) => {
+    setDismissedIssues(prev => [...prev, issue]);
+    setReport(prev => {
+      if (!prev) return prev;
+      const remaining = prev.issues.filter(
+        i => !(i.section === issue.section && i.problem === issue.problem)
+      );
+      return { ...prev, issues: remaining, overallScore: recalcScore(remaining) };
+    });
   };
 
   const handleReanalyze = async () => {
@@ -166,6 +205,7 @@ export default function App() {
       setSessionId(data.sessionId);
       setStructured(data.structuredManuscript);
       setReport(data.complianceReport);
+      setDismissedIssues([]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -215,13 +255,19 @@ export default function App() {
     : 0;
   const isRefining = !!refiningSection;
 
+  const visibleIssues = (allIssues) =>
+    (allIssues || []).filter(
+      issue => !dismissedIssues.some(d => d.section === issue.section && d.problem === issue.problem)
+    );
+
   const issuesByTab = (tab) => {
     if (!report?.issues) return [];
-    if (tab === 'Overview') return report.issues;
-    if (tab === 'Structure') return report.issues.filter(i =>
+    const base = visibleIssues(report.issues);
+    if (tab === 'Overview') return base;
+    if (tab === 'Structure') return base.filter(i =>
       ['abstract', 'introduction', 'conclusion', 'methodology', 'results'].includes((i.section || '').toLowerCase())
     );
-    if (tab === 'Language') return report.issues.filter(i =>
+    if (tab === 'Language') return base.filter(i =>
       ['keywords', 'title', 'abstract'].includes((i.section || '').toLowerCase())
     );
     return [];
@@ -343,7 +389,7 @@ export default function App() {
                     {report.overallScore}<span className="score-unit">%</span>
                   </div>
                   <div className="score-sub">Submission readiness</div>
-                  <div className="score-desc">{scoreSubtitle(report.overallScore, report.issues)}</div>
+                  <div className="score-desc">{scoreSubtitle(report.overallScore, visibleIssues(report.issues))}</div>
                 </div>
                 <div className="score-meta">
                   <div className="meta-item">
@@ -356,7 +402,7 @@ export default function App() {
                   </div>
                   <div className="meta-item">
                     <div className="meta-val" style={{ color: '#ef4444' }}>
-                      {report.issues?.filter(i => i.severity === 'Critical').length || 0}
+                      {visibleIssues(report.issues).filter(i => i.severity === 'Critical').length || 0}
                     </div>
                     <div className="meta-key">Critical issues</div>
                   </div>
@@ -369,7 +415,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Manual warnings hint — always shown after analysis */}
               <div className="manual-warnings-hint">
                 <span className="manual-warnings-hint__icon">&#x1F4CB;</span>
                 <span className="manual-warnings-hint__text">
@@ -431,7 +476,7 @@ export default function App() {
                           <span className="issue-title">{issue.problem}</span>
                         </div>
                         {issue.recommended_action && <p className="issue-action">{issue.recommended_action}</p>}
-                        {getActionButtons(issue, handleRefine, isRefining)}
+                        {getActionButtons(issue, handleRefine, isRefining, handleDismissIssue)}
                       </div>
                     ))}
                   </div>
@@ -463,8 +508,8 @@ export default function App() {
                                 <span
                                   className="section-row-badge"
                                   style={{
-                                    background: isMissing ? '#450a0a' : s.status === 'Critical' ? '#450a0a' : s.status === 'Review' ? '#78350f' : '#14532d',
-                                    color: isMissing ? '#fca5a5' : s.status === 'Critical' ? '#fca5a5' : s.status === 'Review' ? '#fde68a' : '#86efac',
+                                    background: isMissing ? '#fef2f2' : s.status === 'Critical' ? '#fef2f2' : s.status === 'Review' ? '#fffbeb' : '#f0fdf4',
+                                    color: isMissing ? '#b91c1c' : s.status === 'Critical' ? '#b91c1c' : s.status === 'Review' ? '#92400e' : '#15803d',
                                   }}
                                 >{isMissing ? 'Missing' : s.status}</span>
                               </div>

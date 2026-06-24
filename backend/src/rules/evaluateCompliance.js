@@ -49,15 +49,19 @@ function checkCitationPunctuation(fullText) {
   return (fullText.match(/[a-z][\[\(]\d/g) || []).length;
 }
 
-// NEW: check title ends with a period
 function titleEndsWithPeriod(title) {
   return /\.\s*$/.test((title || '').trim());
 }
 
-// NEW: check title case — principal words capitalized, articles/prep/conj lowercase
 function checkTitleCase(title) {
   if (!title) return { passed: true };
-  const skipWords = new Set(['a', 'an', 'the', 'and', 'but', 'for', 'or', 'nor', 'in', 'on', 'at', 'to', 'of', 'by', 'up', 'as']);
+  // expanded skip list — articles, coordinating conjunctions, short prepositions
+  const skipWords = new Set([
+    'a', 'an', 'the',
+    'and', 'but', 'for', 'or', 'nor', 'so', 'yet',
+    'in', 'on', 'at', 'to', 'of', 'by', 'up', 'as',
+    'with', 'from', 'into', 'than', 'via', 'per',
+  ]);
   const words = title.trim().split(/\s+/);
   const violations = [];
   words.forEach((word, i) => {
@@ -76,34 +80,29 @@ function checkTitleCase(title) {
   return { passed: violations.length === 0, violations };
 }
 
-// NEW: check affiliation contains institution + country at minimum
 function checkAffiliationCompleteness(fullText) {
   const hasInstitution = /university|institute|college|lab|department|school/i.test(fullText);
   const hasCountry = /india|usa|germany|china|uk|france|canada|australia|japan|italy|spain/i.test(fullText);
   return { hasInstitution, hasCountry, passed: hasInstitution && hasCountry };
 }
 
-// NEW: check heading levels — LNCS allows max 3 numbered levels
 function checkHeadingDepth(fullText) {
   const level3 = (fullText.match(/^\d+\.\d+\.\d+\s+[A-Z]/m) || []).length;
   const level4 = (fullText.match(/^\d+\.\d+\.\d+\.\d+\s+[A-Z]/m) || []).length;
   return { level3, level4, tooDeep: level4 > 0 };
 }
 
-// NEW: check acknowledgements section is present and unnumbered
 function checkAcknowledgements(fullText) {
   const present = /acknowledgements?\s*\n|acknowledgements?\./i.test(fullText);
   const numbered = /\d+\.?\s+acknowledgements?/i.test(fullText);
   return { present, numbered };
 }
 
-// NEW: check email format in author block
 function checkEmailPresence(fullText) {
   const emails = fullText.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
   return { count: emails.length, hasEmail: emails.length > 0 };
 }
 
-// NEW: check ORCID presence
 function checkOrcidPresence(fullText) {
   const orcid = (fullText.match(/\d{4}-\d{4}-\d{4}-\d{4}/g) || []).length;
   return { count: orcid, present: orcid > 0 };
@@ -113,68 +112,23 @@ function checkOrcidPresence(fullText) {
 
 const MANUAL_WARNINGS = {
   lncs: [
-    {
-      title: 'Font sizes',
-      rule: 'LNCS requires: Title — 14pt bold; Level-1 headings — 12pt bold; Level-2 headings — 10pt bold; Body text — 10pt; Abstract — 9pt. Verify all font sizes in your DOCX/LaTeX template before final submission.',
-    },
-    {
-      title: 'Margins',
-      rule: 'LNCS page margins: Top 4.2 cm, Bottom 4.2 cm, Left 4.2 cm, Right 4.2 cm (A5 paper). Final check must be done in the formatted DOCX or LaTeX template.',
-    },
-    {
-      title: 'Paragraph indentation',
-      rule: 'The first paragraph after a section heading must be flush left (no indent). All subsequent paragraphs must have a 0.4 cm (11pt) first-line indent. Blank lines between paragraphs are not permitted — spacing is handled by the template stylesheet.',
-    },
-    {
-      title: 'Equation alignment and numbering',
-      rule: 'Displayed equations must be centered on their own line. Equation numbers must be in parentheses, right-aligned to the text column margin. Equations that conclude a sentence should carry a period before the equation number.',
-    },
-    {
-      title: 'Caption centering and justification',
-      rule: 'Short captions (single line) must be centered. Long captions (two or more lines) must be fully justified. Table captions must appear ABOVE the table. Figure captions must appear BELOW the figure.',
-    },
-    {
-      title: 'Reference hanging indent',
-      rule: 'Each reference entry in the list must have a hanging indent: first line flush left, subsequent lines indented. This is a template-level style and must be verified in the final formatted document.',
-    },
-    {
-      title: 'Vector graphics for line art',
-      rule: 'All schematic drawings, charts, and graphs must be embedded as vector graphics (.pdf or .eps). Raster images (.png, .jpg) are not acceptable for line art in LNCS proceedings.',
-    },
-    {
-      title: 'Level 3 and Level 4 run-in headings',
-      rule: 'Level-3 headings must be 10pt bold, unnumbered, and run-in — i.e., the heading ends with a period and the paragraph text starts on the same line. Level-4 headings follow the same rule but use 10pt italic.',
-    },
+    { title: 'Font sizes', rule: 'LNCS requires: Title — 14pt bold; Level-1 headings — 12pt bold; Level-2 headings — 10pt bold; Body text — 10pt; Abstract — 9pt. Verify all font sizes in your DOCX/LaTeX template before final submission.' },
+    { title: 'Margins', rule: 'LNCS page margins: Top 4.2 cm, Bottom 4.2 cm, Left 4.2 cm, Right 4.2 cm (A5 paper). Final check must be done in the formatted DOCX or LaTeX template.' },
+    { title: 'Paragraph indentation', rule: 'The first paragraph after a section heading must be flush left (no indent). All subsequent paragraphs must have a 0.4 cm (11pt) first-line indent. Blank lines between paragraphs are not permitted — spacing is handled by the template stylesheet.' },
+    { title: 'Equation alignment and numbering', rule: 'Displayed equations must be centered on their own line. Equation numbers must be in parentheses, right-aligned to the text column margin. Equations that conclude a sentence should carry a period before the equation number.' },
+    { title: 'Caption centering and justification', rule: 'Short captions (single line) must be centered. Long captions (two or more lines) must be fully justified. Table captions must appear ABOVE the table. Figure captions must appear BELOW the figure.' },
+    { title: 'Reference hanging indent', rule: 'Each reference entry in the list must have a hanging indent: first line flush left, subsequent lines indented. This is a template-level style and must be verified in the final formatted document.' },
+    { title: 'Vector graphics for line art', rule: 'All schematic drawings, charts, and graphs must be embedded as vector graphics (.pdf or .eps). Raster images (.png, .jpg) are not acceptable for line art in LNCS proceedings.' },
+    { title: 'Level 3 and Level 4 run-in headings', rule: 'Level-3 headings must be 10pt bold, unnumbered, and run-in — i.e., the heading ends with a period and the paragraph text starts on the same line. Level-4 headings follow the same rule but use 10pt italic.' },
   ],
   ieee: [
-    {
-      title: 'Font sizes',
-      rule: 'IEEE requires: Paper title — 24pt; Author names — 11pt; Body text — 10pt Times New Roman; Abstract and Index Terms — 9pt. Verify in the official IEEE conference template.',
-    },
-    {
-      title: 'Margins',
-      rule: 'IEEE US Letter margins: Top 0.75in, Bottom 1.69in, Left/Right 0.625in. For A4: Top 19mm, Bottom 43mm, Left/Right 13mm. Never reduce margins below these values.',
-    },
-    {
-      title: 'Two-column layout',
-      rule: 'IEEE conference papers use a strict two-column layout. Ensure all figures, tables, and equations fit within a single column unless explicitly spanning both columns using the appropriate template macro.',
-    },
-    {
-      title: 'Paragraph indentation',
-      rule: 'Body paragraphs must use a 3.5mm (0.14in) first-line indent. Text must be fully justified (flush left and right). Verify paragraph styles in the IEEE Word or LaTeX template.',
-    },
-    {
-      title: 'Equation alignment and numbering',
-      rule: 'Equations must be centered on their own line. Equation numbers must appear in parentheses at the right margin. Equations ending a sentence take a period immediately before the closing parenthesis of the equation number.',
-    },
-    {
-      title: 'Caption centering and justification',
-      rule: 'Table captions (TABLE I. format, all caps for TABLE) appear ABOVE the table. Figure captions appear BELOW the figure. Short captions are centered; long captions are justified.',
-    },
-    {
-      title: 'Reference hanging indent',
-      rule: 'Each IEEE reference entry must have a hanging indent. The first line is flush left; all subsequent lines are indented. Verify this in the final formatted document.',
-    },
+    { title: 'Font sizes', rule: 'IEEE requires: Paper title — 24pt; Author names — 11pt; Body text — 10pt Times New Roman; Abstract and Index Terms — 9pt. Verify in the official IEEE conference template.' },
+    { title: 'Margins', rule: 'IEEE US Letter margins: Top 0.75in, Bottom 1.69in, Left/Right 0.625in. For A4: Top 19mm, Bottom 43mm, Left/Right 13mm. Never reduce margins below these values.' },
+    { title: 'Two-column layout', rule: 'IEEE conference papers use a strict two-column layout. Ensure all figures, tables, and equations fit within a single column unless explicitly spanning both columns using the appropriate template macro.' },
+    { title: 'Paragraph indentation', rule: 'Body paragraphs must use a 3.5mm (0.14in) first-line indent. Text must be fully justified (flush left and right). Verify paragraph styles in the IEEE Word or LaTeX template.' },
+    { title: 'Equation alignment and numbering', rule: 'Equations must be centered on their own line. Equation numbers must appear in parentheses at the right margin. Equations ending a sentence take a period immediately before the closing parenthesis of the equation number.' },
+    { title: 'Caption centering and justification', rule: 'Table captions (TABLE I. format, all caps for TABLE) appear ABOVE the table. Figure captions appear BELOW the figure. Short captions are centered; long captions are justified.' },
+    { title: 'Reference hanging indent', rule: 'Each IEEE reference entry must have a hanging indent. The first line is flush left; all subsequent lines are indented. Verify this in the final formatted document.' },
   ],
 };
 
@@ -203,7 +157,6 @@ function evaluateCompliance(structured, profileConfig) {
   const profile = profileConfig.id || 'lncs';
   const title = structured.title || '';
 
-  // ── 1. Required sections ──────────────────────────────────────────────────
   for (const required of profileConfig.requiredSections) {
     const found = allDetected.includes(required.toLowerCase()) && !allMissing.includes(required.toLowerCase());
     ruleChecks.push({ rule: `section_present_${required}`, passed: found, observedValue: found, expected: 'true' });
@@ -215,7 +168,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // ── 2. Abstract word count ────────────────────────────────────────────────
   const abstractText = structured.abstract || '';
   const abstractWords = wordCount(abstractText);
   const minWords = profileConfig.abstractMinWords;
@@ -229,7 +181,6 @@ function evaluateCompliance(structured, profileConfig) {
     issues.push({ section: 'abstract', severity: 'Review', problem: `Abstract is ${abstractWords} words \u2014 below the ${profileConfig.name} minimum of ${minWords} words.`, recommended_action: `Expand the abstract to at least ${minWords} words.` });
   }
 
-  // ── 3. Keywords ───────────────────────────────────────────────────────────
   if (profileConfig.keywordsRequired) {
     const kwCount = Array.isArray(structured.keywords) ? structured.keywords.length : 0;
     const kwOk = kwCount >= profileConfig.keywordsMinCount && kwCount <= profileConfig.keywordsMaxCount;
@@ -242,7 +193,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // ── 4. References section ─────────────────────────────────────────────────
   if (profileConfig.referenceSectionRequired) {
     ruleChecks.push({ rule: 'references_present', passed: structured.referencesPresent, observedValue: structured.referencesPresent, expected: 'true' });
     if (!structured.referencesPresent) {
@@ -250,7 +200,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // ── 5. Citation style ─────────────────────────────────────────────────────
   const { numbered, authorYear } = detectCitationStyle(fullText);
   if (numbered === 0 && authorYear === 0 && structured.referencesPresent) {
     issues.push({ section: 'references', severity: 'Review', problem: 'No inline citations detected in the manuscript body.', recommended_action: 'Add numbered citations [1] in the body text for every listed reference.' });
@@ -259,63 +208,54 @@ function evaluateCompliance(structured, profileConfig) {
   }
   ruleChecks.push({ rule: 'citation_style', passed: authorYear <= numbered, observedValue: `numbered:${numbered} author-year:${authorYear}`, expected: 'numbered' });
 
-  // ── 6. Citation punctuation ───────────────────────────────────────────────
   const badPunctCount = checkCitationPunctuation(fullText);
   if (badPunctCount > 2) {
     issues.push({ section: 'references', severity: 'Review', problem: `${badPunctCount} citations appear without a space or punctuation before the bracket (e.g. "word[1]" \u2014 should be "word [1]" or "word.[1]").`, recommended_action: 'Add a space or period before each citation bracket.' });
   }
   ruleChecks.push({ rule: 'citation_punctuation', passed: badPunctCount <= 2, observedValue: badPunctCount, expected: '\u22642' });
 
-  // ── 7. Reference list style ───────────────────────────────────────────────
   const refStyle = checkReferenceListStyle(refText);
   if (refText && refStyle.style === 'author-year' && (profile === 'lncs' || profile === 'ieee')) {
     issues.push({ section: 'references', severity: 'Critical', problem: `Reference list uses author-year format. ${profileConfig.name} requires numbered references: [1] Author, Title, Venue, Year.`, recommended_action: `Reformat all references to numbered style as required by ${profileConfig.name}.` });
   }
   ruleChecks.push({ rule: 'reference_list_style', passed: refStyle.style !== 'author-year', observedValue: refStyle.style, expected: 'numbered' });
 
-  // ── 8. Title punctuation ─────────────────────────────────────────────────
   const titleHasPeriod = titleEndsWithPeriod(title);
   ruleChecks.push({ rule: 'title_no_trailing_period', passed: !titleHasPeriod, observedValue: titleHasPeriod ? 'ends with period' : 'ok', expected: 'no trailing period' });
   if (title && titleHasPeriod) {
     issues.push({ section: 'title', severity: 'Critical', problem: 'The paper title must not end with a period.', recommended_action: 'Remove the trailing period from the paper title.' });
   }
 
-  // ── 9. Title case ─────────────────────────────────────────────────────────
   const titleCaseCheck = checkTitleCase(title);
   ruleChecks.push({ rule: 'title_case', passed: titleCaseCheck.passed, observedValue: titleCaseCheck.violations?.join(', ') || 'ok', expected: 'principal words capitalized' });
   if (title && !titleCaseCheck.passed && titleCaseCheck.violations?.length > 0) {
     issues.push({ section: 'title', severity: 'Review', problem: `Title case issue: "${titleCaseCheck.violations.join(', ')}" may not follow LNCS capitalization rules (capitalize nouns, verbs, adjectives; lowercase articles and short prepositions).`, recommended_action: 'Review title capitalization against the LNCS heading style guide.' });
   }
 
-  // ── 10. Author affiliation completeness ───────────────────────────────────
   const affiliation = checkAffiliationCompleteness(fullText);
   ruleChecks.push({ rule: 'affiliation_completeness', passed: affiliation.passed, observedValue: JSON.stringify(affiliation), expected: 'institution + country' });
   if (!affiliation.passed) {
     issues.push({ section: 'metadata', severity: 'Review', problem: `Author affiliation appears incomplete. ${profileConfig.name} requires institution name, town/city, and country for every author.`, recommended_action: 'Add full affiliation including Department, University, City, and Country for each author.' });
   }
 
-  // ── 11. Email presence ────────────────────────────────────────────────────
   const emailCheck = checkEmailPresence(fullText);
   ruleChecks.push({ rule: 'email_present', passed: emailCheck.hasEmail, observedValue: `${emailCheck.count} email(s)`, expected: '\u22651 email' });
   if (!emailCheck.hasEmail) {
     issues.push({ section: 'metadata', severity: 'Review', problem: 'No author email address detected.', recommended_action: `${profileConfig.name} requires at least the corresponding author\u2019s email address to be listed under the affiliation.` });
   }
 
-  // ── 12. Heading depth ─────────────────────────────────────────────────────
   const headingDepth = checkHeadingDepth(fullText);
   ruleChecks.push({ rule: 'heading_depth', passed: !headingDepth.tooDeep, observedValue: headingDepth.level4 > 0 ? 'Level 4+ detected' : 'ok', expected: 'max 3 numbered levels' });
   if (headingDepth.tooDeep) {
     issues.push({ section: 'structure', severity: 'Review', problem: 'Heading depth exceeds the recommended maximum. LNCS and IEEE allow a maximum of 3 numbered heading levels.', recommended_action: 'Reduce heading depth to 3 levels or fewer. Use run-in headings for Level 3 and Level 4.' });
   }
 
-  // ── 13. Acknowledgements check ────────────────────────────────────────────
   const ackCheck = checkAcknowledgements(fullText);
   if (ackCheck.present && ackCheck.numbered) {
     issues.push({ section: 'acknowledgements', severity: 'Review', problem: 'Acknowledgements section appears to be numbered. LNCS requires the Acknowledgements section to be unnumbered.', recommended_action: 'Remove the section number from the Acknowledgements heading.' });
     ruleChecks.push({ rule: 'acknowledgements_unnumbered', passed: false, observedValue: 'numbered', expected: 'unnumbered' });
   }
 
-  // ── 14. Figure caption format ─────────────────────────────────────────────
   const figCheck = checkFigureCaptions(fullText, profile);
   if (figCheck.hasFigures) {
     const figOk = profile === 'lncs' ? figCheck.lncsCount > 0 : figCheck.ieeeCount > 0;
@@ -334,7 +274,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // ── 15. Table caption format ──────────────────────────────────────────────
   const tableCheck = checkTableCaptions(fullText);
   if (tableCheck.hasTables && tableCheck.correctCount === 0) {
     ruleChecks.push({ rule: 'table_caption_format', passed: false, observedValue: 0, expected: 'Table N. format' });
@@ -348,14 +287,12 @@ function evaluateCompliance(structured, profileConfig) {
     });
   }
 
-  // ── 16. Undefined acronyms ────────────────────────────────────────────────
   const undefinedAcr = findUndefinedAcronyms(fullText);
   ruleChecks.push({ rule: 'acronym_definitions', passed: undefinedAcr.length === 0, observedValue: undefinedAcr.join(', ') || 'none', expected: 'all defined on first use' });
   if (undefinedAcr.length > 0) {
     issues.push({ section: 'language', severity: 'Review', problem: `${undefinedAcr.length} acronym(s) used without definition on first use: ${undefinedAcr.join(', ')}.`, recommended_action: 'Define each acronym on first use, e.g. "Convolutional Neural Network (CNN)".' });
   }
 
-  // ── 17. Page length estimate ──────────────────────────────────────────────
   if (fullText.trim().length > 100) {
     const estimatedPages = estimatePages(fullText, profile);
     const minPages = profileConfig.minPages || (profile === 'lncs' ? 10 : 4);
@@ -368,7 +305,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // ── 18. Conclusion — no new results ──────────────────────────────────────
   const conclusionText = sections['conclusion'] || sections['conclusions'] || '';
   if (conclusionText.length > 50) {
     const newResultPattern = /we (found|discovered|show|demonstrate|prove|introduce|present a novel)/i;
@@ -378,7 +314,6 @@ function evaluateCompliance(structured, profileConfig) {
     }
   }
 
-  // ── Score ─────────────────────────────────────────────────────────────────
   const criticalCount = issues.filter(i => i.severity === 'Critical').length;
   const reviewCount = issues.filter(i => i.severity === 'Review').length;
   const overallScore = Math.max(0, 100 - criticalCount * 20 - reviewCount * 5);
