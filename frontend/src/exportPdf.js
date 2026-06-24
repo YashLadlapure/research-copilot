@@ -4,7 +4,7 @@ const PAGE_W = 210;
 const PAGE_H = 297;
 const MARGIN = 18;
 const TEXT_W = PAGE_W - MARGIN * 2;
-const LINE_H = 7;
+const LINE_H = 6.5;
 
 const PUBLICATION_TIPS = {
   lncs: [
@@ -56,6 +56,64 @@ function drawDivider(doc, y) {
   doc.setDrawColor(200, 200, 200);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);
   return y + 5;
+}
+
+// Estimate how tall a warning card will be before drawing it
+function estimateWarningHeight(doc, warning) {
+  const titleLines = doc.splitTextToSize(warning.title, TEXT_W - 10);
+  const ruleLines = doc.splitTextToSize(warning.rule, TEXT_W - 14);
+  return 6 + titleLines.length * LINE_H + 3 + ruleLines.length * LINE_H + 6;
+}
+
+function drawWarningCard(doc, warning, index, y) {
+  const cardPad = 5;
+  const innerW = TEXT_W - cardPad * 2;
+
+  doc.setFontSize(9.5);
+  doc.setFont('helvetica', 'bold');
+  const titleLines = doc.splitTextToSize(warning.title, innerW);
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  const ruleLines = doc.splitTextToSize(warning.rule, innerW - 6);
+
+  const cardH = cardPad + titleLines.length * LINE_H + 3 + ruleLines.length * LINE_H + cardPad;
+
+  // card background — alternate light amber tint
+  const bgColor = index % 2 === 0 ? [255, 251, 235] : [255, 255, 255];
+  doc.setFillColor(...bgColor);
+  doc.setDrawColor(220, 180, 60);
+  doc.roundedRect(MARGIN, y, TEXT_W, cardH, 2, 2, 'FD');
+
+  // index badge
+  doc.setFillColor(160, 110, 10);
+  doc.roundedRect(MARGIN + 4, y + cardPad - 2, 7, 5.5, 1, 1, 'F');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text(String(index + 1), MARGIN + 5.6, y + cardPad + 1.8);
+
+  // title
+  let cy = y + cardPad + 1;
+  doc.setFontSize(9.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 60, 0);
+  titleLines.forEach(line => {
+    doc.text(line, MARGIN + 14, cy);
+    cy += LINE_H;
+  });
+
+  cy += 2;
+
+  // rule text — indented, lighter
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(80, 60, 20);
+  ruleLines.forEach(line => {
+    doc.text(line, MARGIN + cardPad + 8, cy);
+    cy += LINE_H;
+  });
+
+  return y + cardH + 4;
 }
 
 export function generateRevisionPdf(exportText, revisedSections, profile, score, manualWarnings = []) {
@@ -134,27 +192,31 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
     if (y > PAGE_H - 60) { doc.addPage(); y = MARGIN + 6; }
     y += 6;
     y = drawDivider(doc, y);
-    y += 4;
+    y += 2;
 
+    // Section header bar
     doc.setFillColor(120, 80, 10);
-    doc.roundedRect(MARGIN, y - 4, TEXT_W, 10, 2, 2, 'F');
+    doc.roundedRect(MARGIN, y, TEXT_W, 11, 2, 2, 'F');
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 220, 100);
-    doc.text('3. Warnings (Manual Check Required)', MARGIN + 4, y + 3);
-    y += 14;
+    doc.text('3. Warnings (Manual Check Required)', MARGIN + 4, y + 7.5);
+    y += 15;
 
-    doc.setFontSize(8.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
-    y = writeWrapped(doc, `These layout rules cannot be verified from extracted text. Check each item manually in your ${profileLabel} DOCX/LaTeX template before final submission.`, MARGIN, y, TEXT_W, { size: 8.5, color: [100, 100, 100] });
-    y += 4;
+    // Subtitle
+    y = writeWrapped(
+      doc,
+      `These layout rules cannot be verified from extracted text. Check each item manually in your ${profileLabel} DOCX/LaTeX template before final submission.`,
+      MARGIN, y, TEXT_W,
+      { size: 8.5, color: [100, 100, 100] }
+    );
+    y += 5;
 
+    // One card per warning
     manualWarnings.forEach((warning, i) => {
-      if (y > PAGE_H - 30) { doc.addPage(); y = MARGIN + 6; }
-      y = writeLine(doc, `${i + 1})  ${warning.title}`, MARGIN, y, { size: 10, bold: true, color: [30, 30, 30] });
-      y = writeWrapped(doc, `\u27a2  ${warning.rule}`, MARGIN + 5, y, TEXT_W - 5, { size: 9, color: [80, 80, 80] });
-      y += 4;
+      const estH = estimateWarningHeight(doc, warning);
+      if (y + estH > PAGE_H - MARGIN) { doc.addPage(); y = MARGIN + 6; }
+      y = drawWarningCard(doc, warning, i, y);
     });
   }
 
