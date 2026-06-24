@@ -1,8 +1,16 @@
 const express = require('express');
 const { getSession } = require('../store');
-const { callGemini } = require('../ai/gemini');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+
+async function callGemini(prompt) {
+  const model = genAI.getGenerativeModel({ model: MODEL });
+  const result = await model.generateContent(prompt);
+  return result.response.text().trim();
+}
 
 const PROFILE_LABELS = {
   lncs: 'Springer LNCS (Lecture Notes in Computer Science)',

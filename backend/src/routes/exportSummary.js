@@ -1,19 +1,15 @@
 const express = require('express');
 const { getSession } = require('../store');
-const { callGemini } = require('../ai/gemini');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
-const SECTION_ORDER = ['title', 'abstract', 'keywords', 'introduction', 'methodology', 'results', 'conclusion', 'references'];
-
-function buildFullPaper(structured, revisedSections) {
-  return SECTION_ORDER
-    .filter(k => structured[k])
-    .map(k => ({
-      section: k,
-      content: revisedSections[k] || (typeof structured[k] === 'string' ? structured[k] : JSON.stringify(structured[k])),
-      revised: !!revisedSections[k],
-    }));
+async function callGemini(prompt) {
+  const model = genAI.getGenerativeModel({ model: MODEL });
+  const result = await model.generateContent(prompt);
+  return result.response.text().trim();
 }
 
 router.post('/', async (req, res) => {
@@ -23,55 +19,66 @@ router.post('/', async (req, res) => {
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  const structured = session.structuredManuscript;
-  const entries = Object.keys(revisedSections || {});
+  const { sections, profile } = session;
+  const revised = revisedSections || {};
+  const hasRevisions = Object.keys(revised).length > 0;
 
-  if (entries.length === 0) {
-    return res.json({ changes: [], fullPaper: buildFullPaper(structured, {}) });
-  }
+  let changeLog = '';
 
-  const pairs = entries.map(section => ({
-    section,
-    original: typeof structured[section] === 'string'
-      ? structured[section]
-      : JSON.stringify(structured[section]),
-    revised: revisedSections[section],
-  }));
+  if (hasRevisions) {
+    const entries = Object.entries(revised);
+    const explanations = [];
 
-  const prompt = `You are an academic writing assistant reviewing manuscript revisions.
+    for (const [sectionName, revisedText] of entries) {
+      const original = sections[sectionName] || '';
+      const prompt = `You are a research writing assistant.
 
-For each section change below, write a 1-2 sentence explanation of WHY this revision improves the paper for academic publication. Be specific — mention what was weak before and what the revision fixes (clarity, compliance, tone, structure, etc.).
+A researcher revised the "${sectionName}" section of their manuscript for ${profile.toUpperCase()} compliance.
 
-Return ONLY a JSON array matching this shape exactly:
-[{"section":"<name>","summary":"<explanation>"}]
+Original:
+${original.slice(0, 800)}
 
-Changes:
-${JSON.stringify(pairs, null, 2)}`;
+Revised:
+${revisedText.slice(0, 800)}
 
-  try {
-    const raw = await callGemini(prompt);
-    let summaries;
-    try {
-      const match = raw.match(/(\[[\s\S]*?\])/);
-      summaries = match ? JSON.parse(match[1]) : JSON.parse(raw);
-    } catch {
-      summaries = pairs.map(p => ({ section: p.section, summary: 'Revision improves compliance and academic tone.' }));
+Write ONE sentence (max 30 words) explaining why this revision improves compliance. Be specific. No fluff.`;
+
+      try {
+        const explanation = await callGemini(prompt);
+        explanations.push({ section: sectionName, original, revised: revisedText, why: explanation });
+      } catch {
+        explanations.push({ section: sectionName, original, revised: revisedText, why: 'Improved for publication compliance.' });
+      }
     }
 
-    const changes = pairs.map(p => {
-      const found = summaries.find(s => s.section?.toLowerCase() === p.section?.toLowerCase());
-      return {
-        section: p.section,
-        original: p.original,
-        revised: p.revised,
-        summary: found?.summary || 'Revision improves compliance and academic tone.',
-      };
-    });
-
-    res.json({ changes, fullPaper: buildFullPaper(structured, revisedSections) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    changeLog = explanations.map((e, i) =>
+      `[${i + 1}] ${e.section.toUpperCase()}\nBEFORE: "${e.original.slice(0, 200).replace(/\n/g, ' ')}..."\nAFTER:  "${e.revised.slice(0, 200).replace(/\n/g, ' ')}..."\nWHY:    ${e.why}\n`
+    ).join('\n');
   }
+
+  const allSections = Object.entries(sections)
+    .map(([name, text]) => {
+      const isRevised = revised[name];
+      const label = isRevised ? `[REVISED] ${name.toUpperCase()}` : name.toUpperCase();
+      return `${label}\n${(isRevised ? revised[name] : text)}\n`;
+    })
+    .join('\n---\n\n');
+
+  const output = [
+    `RESEARCH COPILOT — EXPORT`,
+    `Profile: ${profile.toUpperCase()}`,
+    `Generated: ${new Date().toISOString()}`,
+    '',
+    hasRevisions ? '=== CHANGE SUMMARY ===\n' + changeLog : '=== NO REVISIONS MADE ===',
+    '',
+    '=== FULL PAPER ===',
+    '',
+    allSections,
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Content-Disposition', `attachment; filename="manuscript-export.txt"`);
+  res.send(output);
 });
 
 module.exports = router;
