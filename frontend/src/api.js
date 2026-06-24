@@ -55,3 +55,17 @@ export async function fetchBonusTips(sessionId, profile) {
   if (!res.ok) throw new Error(data.error || 'Failed to fetch tips');
   return data;
 }
+
+export async function fetchExportData(sessionId, revisedSections) {
+  const res = await fetch(`${BASE}/api/export-summary`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, revisedSections }),
+  });
+  // backend returns plain text
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Export failed');
+  }
+  return res.text();
+}

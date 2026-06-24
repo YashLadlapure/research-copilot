@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import './App.css';
-import { analyzeManuscript, refineSection, applySuggestion, extractPdf, fetchBonusTips } from './api';
+import { analyzeManuscript, refineSection, applySuggestion, extractPdf, fetchBonusTips, fetchExportData } from './api';
+import { generateRevisionPdf } from './exportPdf';
 
 const PROFILES = [
   { value: 'lncs', label: 'Springer LNCS' },
@@ -50,71 +51,14 @@ function getActionButtons(issue, onRefine, loading) {
   );
 }
 
-function buildAndDownload(structured, revisedSections, profile) {
-  const profileLabel = PROFILES.find(p => p.value === profile)?.label || profile;
-  const sections = structured?.sections || {};
-  const revised = revisedSections || {};
-  const hasRevisions = Object.keys(revised).length > 0;
-
-  const lines = [];
-  lines.push('RESEARCH COPILOT — MANUSCRIPT EXPORT');
-  lines.push('Profile: ' + profileLabel);
-  lines.push('Generated: ' + new Date().toLocaleString());
-  lines.push('');
-
-  if (hasRevisions) {
-    lines.push('=== CHANGES APPLIED ===');
-    lines.push('');
-    Object.entries(revised).forEach(([sec, revisedText], i) => {
-      const original = sections[sec] || '';
-      lines.push(`[${i + 1}] ${sec.toUpperCase()}`);
-      lines.push('BEFORE: ' + original.slice(0, 400) + (original.length > 400 ? '...' : ''));
-      lines.push('AFTER:  ' + revisedText.slice(0, 400) + (revisedText.length > 400 ? '...' : ''));
-      lines.push('');
-    });
-  } else {
-    lines.push('No revisions applied.');
-    lines.push('');
-  }
-
-  lines.push('=== FULL PAPER ===');
-  lines.push('');
-
-  const allSectionNames = [
-    ...SECTION_ORDER.filter(s => sections[s]),
-    ...Object.keys(sections).filter(s => !SECTION_ORDER.includes(s)),
-  ];
-
-  allSectionNames.forEach(sec => {
-    const content = revised[sec] || sections[sec] || '';
-    const label = revised[sec] ? `[REVISED] ${sec.toUpperCase()}` : sec.toUpperCase();
-    lines.push(label);
-    lines.push(content);
-    lines.push('');
-  });
-
-  lines.push('---');
-  lines.push('AI was used to assist with language refinement and formatting compliance.');
-  lines.push('Authors reviewed all changes before submission.');
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'revised-manuscript.txt';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 export default function App() {
   const [text, setText] = useState('');
   const [profile, setProfile] = useState('lncs');
   const [refineMode, setRefineMode] = useState('strict');
   const [paperTitle, setPaperTitle] = useState('');
   const [loading, setLoading] = useState(false);
-  const [refiningSection, setRefiningSection] = useState(null); // tracks which section is actively loading
+  const [refiningSection, setRefiningSection] = useState(null);
+  const [exportLoading, setExportLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Overview');
@@ -161,7 +105,7 @@ export default function App() {
       const data = await fetchBonusTips(sid, profile);
       setBonusTips(data);
     } catch {
-      // non-critical, fail silently
+      // non-critical
     } finally {
       setTipsLoading(false);
     }
@@ -170,7 +114,7 @@ export default function App() {
   const handleRefine = async (section) => {
     if (!sessionId || loading || refiningSection) return;
     setSelectedSection(section);
-    setRefiningSection(section); // track exactly which section is refining
+    setRefiningSection(section);
     setSuggestion(null);
     setError(null);
     try {
@@ -229,9 +173,18 @@ export default function App() {
     setSelectedSection(null);
   };
 
-  const handleExport = () => {
-    if (!structured) return;
-    buildAndDownload(structured, revisedSections, profile);
+  const handleExport = async () => {
+    if (!sessionId || !report) return;
+    setExportLoading(true);
+    setError(null);
+    try {
+      const exportText = await fetchExportData(sessionId, revisedSections);
+      generateRevisionPdf(exportText, revisedSections, profile, report.overallScore);
+    } catch (err) {
+      setError('Export failed: ' + err.message);
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const handlePdfUpload = async (e) => {
@@ -335,8 +288,13 @@ export default function App() {
           </button>
 
           {report && (
-            <button className="btn btn-outline" onClick={handleExport} style={{ marginTop: '8px' }}>
-              {hasRevisions ? 'Download revised paper' : 'Download paper summary'}
+            <button
+              className="btn btn-outline"
+              onClick={handleExport}
+              disabled={exportLoading}
+              style={{ marginTop: '8px' }}
+            >
+              {exportLoading ? 'Generating PDF…' : 'Export revision report'}
             </button>
           )}
 
@@ -469,7 +427,7 @@ export default function App() {
                         {buildSectionRows().map(s => {
                           const isNonRefinable = NON_REFINABLE.includes(s.name.toLowerCase());
                           const isMissing = s.status === 'Missing';
-                          const isThisRefining = refiningSection === s.name; // only THIS row shows spinner
+                          const isThisRefining = refiningSection === s.name;
                           const clickable = sessionId && !isNonRefinable && !isMissing && !isRefining;
                           return (
                             <div
