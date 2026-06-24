@@ -95,27 +95,72 @@ function checkEmailPresence(rawText) {
 
 const MANUAL_WARNINGS = {
   lncs: [
-    { title: 'Font sizes', rule: 'LNCS requires: Title — 14pt bold; Level-1 headings — 12pt bold; Level-2 headings — 10pt bold; Body text — 10pt; Abstract — 9pt. Verify all font sizes in your DOCX/LaTeX template before final submission.' },
-    { title: 'Margins', rule: 'LNCS page margins: Top 4.2 cm, Bottom 4.2 cm, Left 4.2 cm, Right 4.2 cm (A5 paper). Final check must be done in the formatted DOCX or LaTeX template.' },
-    { title: 'Paragraph indentation', rule: 'The first paragraph after a section heading must be flush left (no indent). All subsequent paragraphs must have a 0.4 cm (11pt) first-line indent. Blank lines between paragraphs are not permitted — spacing is handled by the template stylesheet.' },
-    { title: 'Equation alignment and numbering', rule: 'Displayed equations must be centered on their own line. Equation numbers must be in parentheses, right-aligned to the text column margin. Equations that conclude a sentence should carry a period before the equation number.' },
-    { title: 'Caption centering and justification', rule: 'Short captions (single line) must be centered. Long captions (two or more lines) must be fully justified. Table captions must appear ABOVE the table. Figure captions must appear BELOW the figure.' },
-    { title: 'Reference hanging indent', rule: 'Each reference entry in the list must have a hanging indent: first line flush left, subsequent lines indented. This is a template-level style and must be verified in the final formatted document.' },
-    { title: 'Vector graphics for line art', rule: 'All schematic drawings, charts, and graphs must be embedded as vector graphics (.pdf or .eps). Raster images (.png, .jpg) are not acceptable for line art in LNCS proceedings.' },
-    { title: 'Level 3 and Level 4 run-in headings', rule: 'Level-3 headings must be 10pt bold, unnumbered, and run-in — i.e., the heading ends with a period and the paragraph text starts on the same line. Level-4 headings follow the same rule but use 10pt italic.' },
+    {
+      title: 'Font sizes',
+      rule: 'LNCS font sizes: Title — 14pt bold, centered; Level-1 headings — 12pt bold; Level-2 headings — 10pt bold; Level-3 headings — 10pt bold, unnumbered, run-in; Level-4 headings — 10pt italic, unnumbered, run-in; Body text — 10pt. Verify all sizes in your official LNCS DOCX or LaTeX template.'
+    },
+    {
+      title: 'Page layout',
+      rule: 'LNCS uses A5 paper with a printing area of 122 mm \u00d7 193 mm. Do not override layout settings manually — use the official llncs.cls or DOCX template as-is. The class handles all margins automatically.'
+    },
+    {
+      title: 'Paragraph indentation',
+      rule: 'The first paragraph after any section heading must be flush left (no indent). All subsequent paragraphs must have a first-line indent. Do not insert blank lines between paragraphs — vertical spacing is handled by the template stylesheet.'
+    },
+    {
+      title: 'Equation alignment and numbering',
+      rule: 'Displayed equations must be centered on their own line. Equation numbers appear in parentheses, right-aligned to the text column. Reference equations consistently using their numbers. Note: adding a period before the equation number is template-dependent, not a universal LNCS requirement.'
+    },
+    {
+      title: 'Captions',
+      rule: 'Table captions must appear ABOVE the table. Figure captions must appear BELOW the figure. Short (single-line) captions are centered; long (multi-line) captions are justified. If you use the official template macros, caption placement is handled automatically.'
+    },
+    {
+      title: 'Reference hanging indent',
+      rule: 'Each reference entry must use a hanging indent: first line flush left, all subsequent lines indented. This is a template-level style — verify in the final formatted DOCX or LaTeX output, not in the plain-text manuscript.'
+    },
+    {
+      title: 'Vector graphics for line art',
+      rule: 'All schematic drawings, charts, and graphs should be embedded as vector graphics (.pdf or .eps). Avoid raster formats (.png, .jpg) for line art — they lose quality in print.'
+    },
+    {
+      title: 'Run-in headings (Level 3 and Level 4)',
+      rule: 'Level-3 headings: 10pt bold, unnumbered, run-in — heading ends with a period and body text continues on the same line. Level-4 headings: same rule but 10pt italic. Neither level should be numbered.'
+    },
   ],
   ieee: [
-    { title: 'Font sizes', rule: 'IEEE requires: Paper title — 24pt; Author names — 11pt; Body text — 10pt Times New Roman; Abstract and Index Terms — 9pt. Verify in the official IEEE conference template.' },
-    { title: 'Margins', rule: 'IEEE US Letter margins: Top 0.75in, Bottom 1.69in, Left/Right 0.625in. For A4: Top 19mm, Bottom 43mm, Left/Right 13mm. Never reduce margins below these values.' },
-    { title: 'Two-column layout', rule: 'IEEE conference papers use a strict two-column layout. Ensure all figures, tables, and equations fit within a single column unless explicitly spanning both columns using the appropriate template macro.' },
-    { title: 'Paragraph indentation', rule: 'Body paragraphs must use a 3.5mm (0.14in) first-line indent. Text must be fully justified (flush left and right). Verify paragraph styles in the IEEE Word or LaTeX template.' },
-    { title: 'Equation alignment and numbering', rule: 'Equations must be centered on their own line. Equation numbers must appear in parentheses at the right margin. Equations ending a sentence take a period immediately before the closing parenthesis of the equation number.' },
-    { title: 'Caption centering and justification', rule: 'Table captions (TABLE I. format, all caps for TABLE) appear ABOVE the table. Figure captions appear BELOW the figure. Short captions are centered; long captions are justified.' },
-    { title: 'Reference hanging indent', rule: 'Each IEEE reference entry must have a hanging indent. The first line is flush left; all subsequent lines are indented. Verify this in the final formatted document.' },
+    {
+      title: 'Font sizes',
+      rule: 'IEEE requires: Paper title — 24pt; Author names — 11pt; Body text — 10pt Times New Roman; Abstract and Index Terms — 9pt. Verify in the official IEEE conference template.'
+    },
+    {
+      title: 'Margins',
+      rule: 'IEEE US Letter margins: Top 0.75in, Bottom 1.69in, Left/Right 0.625in. For A4: Top 19mm, Bottom 43mm, Left/Right 13mm. Never reduce margins below these values.'
+    },
+    {
+      title: 'Two-column layout',
+      rule: 'IEEE conference papers use a strict two-column layout. Ensure all figures, tables, and equations fit within a single column unless explicitly spanning both columns using the appropriate template macro.'
+    },
+    {
+      title: 'Paragraph indentation',
+      rule: 'Body paragraphs must use a 3.5mm (0.14in) first-line indent. Text must be fully justified (flush left and right). Verify paragraph styles in the IEEE Word or LaTeX template.'
+    },
+    {
+      title: 'Equation alignment and numbering',
+      rule: 'Equations must be centered on their own line. Equation numbers must appear in parentheses at the right margin. Equations ending a sentence take a period immediately before the closing parenthesis of the equation number.'
+    },
+    {
+      title: 'Captions',
+      rule: 'Table captions (TABLE I. format, TABLE in all caps) appear ABOVE the table. Figure captions appear BELOW the figure. Short captions are centered; long captions are justified.'
+    },
+    {
+      title: 'Reference hanging indent',
+      rule: 'Each IEEE reference entry must have a hanging indent. The first line is flush left; all subsequent lines are indented. Verify this in the final formatted document.'
+    },
   ],
 };
 
-// ─── section tag → nearest real refinable section ────────────────────────────
+// ─── section tag \u2192 nearest real refinable section ────────────────────────────
 const SYNTHETIC_SECTION_MAP = {
   language:        'introduction',
   metadata:        'title',
@@ -170,8 +215,6 @@ function evaluateCompliance(structured, profileConfig) {
     });
   }
 
-  // manualOnly issues bypass section remapping — section stays as-is and
-  // the frontend renders a manual note instead of a Refine button.
   function addManualIssue(issue) {
     issues.push({ ...issue, manualOnly: true });
   }
@@ -312,7 +355,6 @@ function evaluateCompliance(structured, profileConfig) {
     const maxPages = (profileConfig.pageRange && profileConfig.pageRange.max) || (profile === 'lncs' ? 15 : 6);
     ruleChecks.push({ rule: 'page_estimate', passed: estimatedPages >= minPages && estimatedPages <= maxPages, observedValue: `~${estimatedPages} pages`, expected: `${minPages}\u2013${maxPages} pages` });
     if (estimatedPages > maxPages) {
-      // manualOnly: page count cannot be fixed by refining a single section
       addManualIssue({
         section: 'structure',
         severity: 'Review',
