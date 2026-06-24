@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import './App.css';
-import { analyzeManuscript, refineSection, applySuggestion, extractPdf } from './api';
+import { analyzeManuscript, refineSection, applySuggestion, extractPdf, fetchBonusTips, fetchExportSummary } from './api';
 
 const PROFILES = [
   { value: 'lncs', label: 'Springer LNCS' },
@@ -20,8 +20,8 @@ const SEVERITY_COLOR = {
 };
 
 const NON_REFINABLE = ['references', 'bibliography'];
-
-const DASHBOARD_TABS = ['Overview', 'Structure', 'Language', 'AI Disclosure'];
+const DASHBOARD_TABS = ['Overview', 'Structure', 'Language', 'Tips', 'AI Disclosure'];
+const SECTION_ORDER = ['title', 'abstract', 'keywords', 'introduction', 'methodology', 'results', 'conclusion', 'references'];
 
 function scoreColor(score) {
   if (score >= 75) return '#22c55e';
@@ -41,7 +41,6 @@ function scoreSubtitle(score, issues) {
 function getActionButtons(issue, onRefine, loading) {
   const sec = (issue.section || '').toLowerCase();
   const canRefine = !NON_REFINABLE.includes(sec);
-
   if (sec === 'abstract') return (
     <div className="issue-actions">
       {canRefine && <button className="action-btn" onClick={() => onRefine(issue.section)} disabled={loading}>Shorten abstract</button>}
@@ -61,27 +60,69 @@ function getActionButtons(issue, onRefine, loading) {
   );
 }
 
+function downloadPdf(changes, fullPaper, profileLabel) {
+  const lines = [];
+  lines.push('RESEARCH COPILOT — REVISED MANUSCRIPT EXPORT');
+  lines.push('Profile: ' + profileLabel);
+  lines.push('Generated: ' + new Date().toLocaleString());
+  lines.push('');
+
+  if (changes.length > 0) {
+    lines.push('=== CHANGES APPLIED ===');
+    lines.push('');
+    changes.forEach((c, i) => {
+      lines.push(`[${i + 1}] ${c.section.toUpperCase()}`);
+      lines.push('BEFORE: ' + c.original.slice(0, 400) + (c.original.length > 400 ? '...' : ''));
+      lines.push('AFTER:  ' + c.revised.slice(0, 400) + (c.revised.length > 400 ? '...' : ''));
+      lines.push('WHY: ' + c.summary);
+      lines.push('');
+    });
+  } else {
+    lines.push('No changes applied. Full original paper below.');
+    lines.push('');
+  }
+
+  lines.push('=== FULL PAPER ===');
+  lines.push('');
+  fullPaper.forEach(s => {
+    lines.push((s.revised ? '[REVISED] ' : '') + s.section.toUpperCase());
+    lines.push(s.content);
+    lines.push('');
+  });
+
+  lines.push('---');
+  lines.push('AI was used to assist with language refinement and formatting.');
+  lines.push('Authors reviewed all changes before submission.');
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'revised-manuscript.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function App() {
   const [text, setText] = useState('');
   const [profile, setProfile] = useState('lncs');
   const [refineMode, setRefineMode] = useState('strict');
   const [paperTitle, setPaperTitle] = useState('');
-  const [journalNotes, setJournalNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [tipsLoading, setTipsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Overview');
 
   const [sessionId, setSessionId] = useState(null);
   const [structured, setStructured] = useState(null);
   const [report, setReport] = useState(null);
   const [revisedSections, setRevisedSections] = useState({});
+  const [bonusTips, setBonusTips] = useState(null);
 
   const [selectedSection, setSelectedSection] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
   const [error, setError] = useState(null);
-
-  const [copyStatus, setCopyStatus] = useState('');
-  const [exportText, setExportText] = useState('');
 
   const handleAnalyze = async () => {
     if (!text.trim()) return;
@@ -93,18 +134,30 @@ export default function App() {
     setSuggestion(null);
     setSelectedSection(null);
     setActiveTab('Overview');
-    setCopyStatus('');
-    setExportText('');
+    setBonusTips(null);
+    setRevisedSections({});
     try {
       const data = await analyzeManuscript(text, profile);
       setSessionId(data.sessionId);
       setStructured(data.structuredManuscript);
       setReport(data.complianceReport);
-      setRevisedSections({});
+      loadBonusTips(data.sessionId);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadBonusTips = async (sid) => {
+    setTipsLoading(true);
+    try {
+      const data = await fetchBonusTips(sid, profile);
+      setBonusTips(data);
+    } catch {
+      // tips are non-critical, fail silently
+    } finally {
+      setTipsLoading(false);
     }
   };
 
@@ -138,10 +191,7 @@ export default function App() {
       const data = await applySuggestion(sessionId, selectedSection, suggestion.revised_text);
       if (data.complianceReport) setReport(data.complianceReport);
       if (data.structuredManuscript) setStructured(data.structuredManuscript);
-      setRevisedSections(prev => ({
-        ...prev,
-        [selectedSection]: suggestion.revised_text,
-      }));
+      setRevisedSections(prev => ({ ...prev, [selectedSection]: suggestion.revised_text }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -173,60 +223,19 @@ export default function App() {
     setSelectedSection(null);
   };
 
-  const buildExportSummary = () => {
-    const profileLabel = PROFILES.find(p => p.value === profile)?.label || profile;
-    const lines = [
-      '=== RESEARCH COPILOT — COMPLIANCE SUMMARY ===',
-      `Profile: ${profileLabel}`,
-      `Readiness Score: ${report.overallScore} / 100`,
-      '',
-    ];
-
-    if (structured) {
-      lines.push('=== SECTIONS ===');
-      const sectionKeys = [
-        'title', 'abstract', 'keywords', 'introduction',
-        'methodology', 'results', 'conclusion', 'references',
-      ];
-      sectionKeys.forEach(key => {
-        const content = revisedSections[key] || structured[key];
-        if (!content) return;
-        const label = revisedSections[key] ? `[${key.toUpperCase()}] (Revised)` : `[${key.toUpperCase()}]`;
-        lines.push('');
-        lines.push(label);
-        lines.push(typeof content === 'string' ? content : JSON.stringify(content));
-      });
-      lines.push('');
-    }
-
-    if (report.issues?.length > 0) {
-      lines.push('=== COMPLIANCE ISSUES ===');
-      report.issues.forEach(i => {
-        lines.push(`[${i.severity}] ${i.section}: ${i.problem}`);
-        if (i.recommended_action) lines.push(`  → ${i.recommended_action}`);
-      });
-      lines.push('');
-    }
-
-    lines.push('=== AI USE NOTE ===');
-    lines.push(
-      'AI was used to assist with language refinement and formatting; authors reviewed all changes.'
-    );
-
-    return lines.join('\n');
-  };
-
   const handleExport = async () => {
-    const summary = buildExportSummary();
+    if (!sessionId) return;
+    setExportLoading(true);
+    setError(null);
     try {
-      await navigator.clipboard.writeText(summary);
-      setCopyStatus('copied');
-      setExportText('');
-    } catch {
-      setExportText(summary);
-      setCopyStatus('failed');
+      const data = await fetchExportSummary(sessionId, revisedSections);
+      const profileLabel = PROFILES.find(p => p.value === profile)?.label || profile;
+      downloadPdf(data.changes, data.fullPaper, profileLabel);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExportLoading(false);
     }
-    setTimeout(() => setCopyStatus(''), 2500);
   };
 
   const handlePdfUpload = async (e) => {
@@ -292,7 +301,7 @@ export default function App() {
 
       <div className="main-grid">
 
-        {/* ── LEFT ── */}
+        {/* LEFT */}
         <section className="panel panel-left">
           <div className="panel-heading">
             <span className="step-label">Step 1</span>
@@ -306,23 +315,10 @@ export default function App() {
                 : <span className="drop-hint">Drop PDF or paste manuscript text below</span>
               }
             </div>
-            <input
-              id="pdf-upload"
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={handlePdfUpload}
-              disabled={pdfLoading}
-              style={{ display: 'none' }}
-            />
+            <input id="pdf-upload" type="file" accept=".pdf,application/pdf" onChange={handlePdfUpload} disabled={pdfLoading} style={{ display: 'none' }} />
           </label>
 
-          <textarea
-            className="textarea"
-            placeholder="Or paste your manuscript text here…"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={8}
-          />
+          <textarea className="textarea" placeholder="Or paste your manuscript text here…" value={text} onChange={(e) => setText(e.target.value)} rows={8} />
 
           <label className="field-label">Target publication format</label>
           <select className="select" value={profile} onChange={(e) => setProfile(e.target.value)}>
@@ -330,55 +326,26 @@ export default function App() {
           </select>
 
           <label className="field-label">Paper title <span className="field-optional">(optional)</span></label>
-          <input
-            className="input"
-            type="text"
-            placeholder="e.g. A Heuristic Approach to…"
-            value={paperTitle}
-            onChange={(e) => setPaperTitle(e.target.value)}
-          />
+          <input className="input" type="text" placeholder="e.g. A Heuristic Approach to…" value={paperTitle} onChange={(e) => setPaperTitle(e.target.value)} />
 
           <label className="field-label">Preserve meaning mode</label>
           <select className="select" value={refineMode} onChange={(e) => setRefineMode(e.target.value)}>
             {REFINE_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
 
-          <label className="field-label">Journal rules or notes <span className="field-optional">(optional)</span></label>
-          <textarea
-            className="textarea textarea--short"
-            placeholder="e.g. Keep academic tone formal, do not add claims not supported by the manuscript…"
-            value={journalNotes}
-            onChange={(e) => setJournalNotes(e.target.value)}
-            rows={4}
-          />
-
-          <button
-            className="btn btn-primary"
-            onClick={handleAnalyze}
-            disabled={loading || !text.trim()}
-          >
+          <button className="btn btn-primary" onClick={handleAnalyze} disabled={loading || !text.trim()}>
             {loading && !selectedSection ? 'Analyzing…' : 'Analyze manuscript'}
           </button>
 
           {report && (
-            <>
-              <button
-                className={`btn btn-outline export-btn${copyStatus === 'copied' ? ' export-btn--copied' : ''}`}
-                onClick={handleExport}
-                style={{ marginTop: '8px' }}
-              >
-                {copyStatus === 'copied' ? '✓ Copied to clipboard' : 'Export summary'}
-              </button>
-              {copyStatus === 'failed' && exportText && (
-                <textarea
-                  className="export-fallback"
-                  readOnly
-                  value={exportText}
-                  rows={6}
-                  onClick={(e) => e.target.select()}
-                />
-              )}
-            </>
+            <button
+              className="btn btn-outline"
+              onClick={handleExport}
+              disabled={exportLoading}
+              style={{ marginTop: '8px' }}
+            >
+              {exportLoading ? 'Preparing export…' : hasRevisions ? 'Download revised paper' : 'Download paper summary'}
+            </button>
           )}
 
           {hasRevisions && (
@@ -393,7 +360,7 @@ export default function App() {
           </p>
         </section>
 
-        {/* ── CENTER ── */}
+        {/* CENTER */}
         <section className="panel panel-center">
           <div className="panel-heading">
             <span className="step-label">Step 2</span>
@@ -447,15 +414,28 @@ export default function App() {
 
               <div className="tab-bar">
                 {DASHBOARD_TABS.map(tab => (
-                  <button
-                    key={tab}
-                    className={`tab-btn${activeTab === tab ? ' tab-btn--active' : ''}`}
-                    onClick={() => setActiveTab(tab)}
-                  >{tab}</button>
+                  <button key={tab} className={`tab-btn${activeTab === tab ? ' tab-btn--active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
                 ))}
               </div>
 
-              {activeTab === 'AI Disclosure' ? (
+              {activeTab === 'Tips' && (
+                <div className="tips-card">
+                  <p className="tips-title">&#x2728; Bonus tips for {PROFILES.find(p => p.value === profile)?.label}</p>
+                  {tipsLoading && <div className="tips-loading">Asking Gemini for publication tips…</div>}
+                  {!tipsLoading && bonusTips?.tips && (
+                    <ol className="tips-list">
+                      {bonusTips.tips.map((tip, i) => (
+                        <li key={i} className="tips-item">{tip}</li>
+                      ))}
+                    </ol>
+                  )}
+                  {!tipsLoading && !bonusTips && (
+                    <div className="tips-empty">Tips unavailable. Re-run analysis to load.</div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'AI Disclosure' && (
                 <div className="ai-disclosure-card">
                   <p className="ai-disclosure-title">How AI is used in this tool</p>
                   <ul className="ai-disclosure-list">
@@ -466,7 +446,9 @@ export default function App() {
                     <li>No manuscript content is stored permanently. Sessions are in-memory only.</li>
                   </ul>
                 </div>
-              ) : (
+              )}
+
+              {activeTab !== 'Tips' && activeTab !== 'AI Disclosure' && (
                 <>
                   <div className="issues-list">
                     {issuesByTab(activeTab).length === 0 && (
@@ -479,15 +461,10 @@ export default function App() {
                         style={{ borderLeftColor: SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review }}
                       >
                         <div className="issue-header">
-                          <span
-                            className="severity-badge"
-                            style={{ background: SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review }}
-                          >{issue.severity}</span>
+                          <span className="severity-badge" style={{ background: SEVERITY_COLOR[issue.severity] || SEVERITY_COLOR.Review }}>{issue.severity}</span>
                           <span className="issue-title">{issue.problem}</span>
                         </div>
-                        {issue.recommended_action && (
-                          <p className="issue-action">{issue.recommended_action}</p>
-                        )}
+                        {issue.recommended_action && <p className="issue-action">{issue.recommended_action}</p>}
                         {getActionButtons(issue, handleRefine, loading)}
                       </div>
                     ))}
@@ -516,9 +493,7 @@ export default function App() {
                                   : s.note || (isMissing ? 'Not found in manuscript' : 'Detected')}
                               </div>
                               <div className="section-row-right">
-                                {revisedSections[s.name] && (
-                                  <span className="section-revised-badge">Revised</span>
-                                )}
+                                {revisedSections[s.name] && <span className="section-revised-badge">Revised</span>}
                                 <span
                                   className="section-row-badge"
                                   style={{
@@ -539,7 +514,7 @@ export default function App() {
           )}
         </section>
 
-        {/* ── RIGHT ── */}
+        {/* RIGHT */}
         <section className="panel panel-right">
           <div className="panel-heading">
             <span className="step-label">Step 3</span>
@@ -547,30 +522,17 @@ export default function App() {
           </div>
 
           {!suggestion && !loading && !selectedSection && (
-            <div className="empty-state">
-              Click a section row or an issue action to refine a section.
-            </div>
+            <div className="empty-state">Click a section row or an issue action to refine a section.</div>
           )}
 
           {!suggestion && !loading && selectedSection && (
             <div className="section-selected-state">
               <div className="section-selected-name" style={{ textTransform: 'capitalize' }}>{selectedSection}</div>
               <p className="section-selected-hint">Ready to refine. This will send the section text to Gemini for safe improvement.</p>
-              <button
-                className="btn btn-primary"
-                style={{ marginTop: '12px' }}
-                onClick={() => handleRefine(selectedSection)}
-                disabled={loading}
-              >
+              <button className="btn btn-primary" style={{ marginTop: '12px' }} onClick={() => handleRefine(selectedSection)} disabled={loading}>
                 Refine {selectedSection}
               </button>
-              <button
-                className="btn btn-outline"
-                style={{ marginTop: '8px' }}
-                onClick={handleReject}
-              >
-                Cancel
-              </button>
+              <button className="btn btn-outline" style={{ marginTop: '8px' }} onClick={handleReject}>Cancel</button>
             </div>
           )}
 

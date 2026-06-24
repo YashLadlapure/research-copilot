@@ -1,8 +1,20 @@
-import express from 'express';
-import { getSession } from '../store.js';
-import { callGemini } from '../ai/gemini.js';
+const express = require('express');
+const { getSession } = require('../store');
+const { callGemini } = require('../ai/gemini');
 
 const router = express.Router();
+
+const SECTION_ORDER = ['title', 'abstract', 'keywords', 'introduction', 'methodology', 'results', 'conclusion', 'references'];
+
+function buildFullPaper(structured, revisedSections) {
+  return SECTION_ORDER
+    .filter(k => structured[k])
+    .map(k => ({
+      section: k,
+      content: revisedSections[k] || (typeof structured[k] === 'string' ? structured[k] : JSON.stringify(structured[k])),
+      revised: !!revisedSections[k],
+    }));
+}
 
 router.post('/', async (req, res) => {
   const { sessionId, revisedSections } = req.body;
@@ -31,22 +43,17 @@ router.post('/', async (req, res) => {
 For each section change below, write a 1-2 sentence explanation of WHY this revision improves the paper for academic publication. Be specific — mention what was weak before and what the revision fixes (clarity, compliance, tone, structure, etc.).
 
 Return ONLY a JSON array matching this shape exactly:
-[
-  {
-    "section": "<section name>",
-    "summary": "<your 1-2 sentence explanation>"
-  }
-]
+[{"section":"<name>","summary":"<explanation>"}]
 
-Changes to explain:
+Changes:
 ${JSON.stringify(pairs, null, 2)}`;
 
   try {
     const raw = await callGemini(prompt);
     let summaries;
     try {
-      const match = raw.match(/\[([\s\S]*?)\]/);
-      summaries = match ? JSON.parse(`[${match[1]}]`) : JSON.parse(raw);
+      const match = raw.match(/(\[[\s\S]*?\])/);
+      summaries = match ? JSON.parse(match[1]) : JSON.parse(raw);
     } catch {
       summaries = pairs.map(p => ({ section: p.section, summary: 'Revision improves compliance and academic tone.' }));
     }
@@ -61,24 +68,10 @@ ${JSON.stringify(pairs, null, 2)}`;
       };
     });
 
-    res.json({
-      changes,
-      fullPaper: buildFullPaper(structured, revisedSections),
-    });
+    res.json({ changes, fullPaper: buildFullPaper(structured, revisedSections) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-function buildFullPaper(structured, revisedSections) {
-  const ORDER = ['title', 'abstract', 'keywords', 'introduction', 'methodology', 'results', 'conclusion', 'references'];
-  return ORDER
-    .filter(k => structured[k])
-    .map(k => ({
-      section: k,
-      content: revisedSections[k] || (typeof structured[k] === 'string' ? structured[k] : JSON.stringify(structured[k])),
-      revised: !!revisedSections[k],
-    }));
-}
-
-export default router;
+module.exports = router;

@@ -1,6 +1,6 @@
-import express from 'express';
-import { getSession } from '../store.js';
-import { callGemini } from '../ai/gemini.js';
+const express = require('express');
+const { getSession } = require('../store');
+const { callGemini } = require('../ai/gemini');
 
 const router = express.Router();
 
@@ -26,20 +26,17 @@ Give exactly 7 specific, prioritized tips that will significantly increase the c
 
 Focus on: structure expectations, abstract quality, keyword selection, citation format, writing style, figure/table formatting, and common rejection reasons.
 
-Return ONLY a JSON array of 7 strings. Each string is one actionable tip. No explanations outside the JSON.
+Return ONLY a JSON array of 7 strings. Each string is one actionable tip. No markdown, no explanation outside the JSON.
 
 Example format:
-[
-  "Keep the abstract strictly under 150 words and ensure it contains your core contribution in the first sentence.",
-  "..."
-]`;
+["Tip one here.","Tip two here."]`;
 
   try {
     const raw = await callGemini(prompt);
     let tips;
     try {
-      const match = raw.match(/\[([\s\S]*?)\]/);
-      tips = match ? JSON.parse(`[${match[1]}]`) : JSON.parse(raw);
+      const match = raw.match(/(\[[\s\S]*?\])/);
+      tips = match ? JSON.parse(match[1]) : JSON.parse(raw);
     } catch {
       tips = raw.split('\n').filter(l => l.trim().length > 10).slice(0, 7);
     }
@@ -49,4 +46,4 @@ Example format:
   }
 });
 
-export default router;
+module.exports = router;

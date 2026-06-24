@@ -6,6 +6,8 @@ const analyzeRouter = require('./routes/analyze');
 const refineSectionRouter = require('./routes/refineSection');
 const applySuggestionRouter = require('./routes/applySuggestion');
 const extractPdfRouter = require('./routes/extractPdf');
+const bonusTipsRouter = require('./routes/bonusTips');
+const exportSummaryRouter = require('./routes/exportSummary');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -21,6 +23,8 @@ app.use('/api/analyze', analyzeRouter);
 app.use('/api/refine-section', refineSectionRouter);
 app.use('/api/apply-suggestion', applySuggestionRouter);
 app.use('/api/extract-pdf', extractPdfRouter);
+app.use('/api/bonus-tips', bonusTipsRouter);
+app.use('/api/export-summary', exportSummaryRouter);
 
 app.listen(PORT, () => {
   console.log(`[Research Copilot] Server running on http://localhost:${PORT}`);
