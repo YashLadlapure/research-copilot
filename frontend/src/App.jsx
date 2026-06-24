@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import './App.css';
-import { analyzeManuscript, refineSection, applySuggestion, extractPdf, fetchBonusTips, fetchExportSummary } from './api';
+import { analyzeManuscript, refineSection, applySuggestion, extractPdf, fetchBonusTips } from './api';
 
 const PROFILES = [
   { value: 'lncs', label: 'Springer LNCS' },
@@ -60,38 +60,51 @@ function getActionButtons(issue, onRefine, loading) {
   );
 }
 
-function downloadPdf(changes, fullPaper, profileLabel) {
+function buildAndDownload(structured, revisedSections, profile) {
+  const profileLabel = PROFILES.find(p => p.value === profile)?.label || profile;
+  const sections = structured?.sections || {};
+  const revised = revisedSections || {};
+  const hasRevisions = Object.keys(revised).length > 0;
+
   const lines = [];
-  lines.push('RESEARCH COPILOT — REVISED MANUSCRIPT EXPORT');
+  lines.push('RESEARCH COPILOT — MANUSCRIPT EXPORT');
   lines.push('Profile: ' + profileLabel);
   lines.push('Generated: ' + new Date().toLocaleString());
   lines.push('');
 
-  if (changes.length > 0) {
+  if (hasRevisions) {
     lines.push('=== CHANGES APPLIED ===');
     lines.push('');
-    changes.forEach((c, i) => {
-      lines.push(`[${i + 1}] ${c.section.toUpperCase()}`);
-      lines.push('BEFORE: ' + c.original.slice(0, 400) + (c.original.length > 400 ? '...' : ''));
-      lines.push('AFTER:  ' + c.revised.slice(0, 400) + (c.revised.length > 400 ? '...' : ''));
-      lines.push('WHY: ' + c.summary);
+    Object.entries(revised).forEach(([sec, revisedText], i) => {
+      const original = sections[sec] || '';
+      lines.push(`[${i + 1}] ${sec.toUpperCase()}`);
+      lines.push('BEFORE: ' + original.slice(0, 400) + (original.length > 400 ? '...' : ''));
+      lines.push('AFTER:  ' + revisedText.slice(0, 400) + (revisedText.length > 400 ? '...' : ''));
       lines.push('');
     });
   } else {
-    lines.push('No changes applied. Full original paper below.');
+    lines.push('No revisions applied.');
     lines.push('');
   }
 
   lines.push('=== FULL PAPER ===');
   lines.push('');
-  fullPaper.forEach(s => {
-    lines.push((s.revised ? '[REVISED] ' : '') + s.section.toUpperCase());
-    lines.push(s.content);
+
+  const allSectionNames = [
+    ...SECTION_ORDER.filter(s => sections[s]),
+    ...Object.keys(sections).filter(s => !SECTION_ORDER.includes(s)),
+  ];
+
+  allSectionNames.forEach(sec => {
+    const content = revised[sec] || sections[sec] || '';
+    const label = revised[sec] ? `[REVISED] ${sec.toUpperCase()}` : sec.toUpperCase();
+    lines.push(label);
+    lines.push(content);
     lines.push('');
   });
 
   lines.push('---');
-  lines.push('AI was used to assist with language refinement and formatting.');
+  lines.push('AI was used to assist with language refinement and formatting compliance.');
   lines.push('Authors reviewed all changes before submission.');
 
   const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
@@ -99,7 +112,9 @@ function downloadPdf(changes, fullPaper, profileLabel) {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'revised-manuscript.txt';
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
@@ -110,7 +125,6 @@ export default function App() {
   const [paperTitle, setPaperTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [exportLoading, setExportLoading] = useState(false);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Overview');
 
@@ -155,7 +169,7 @@ export default function App() {
       const data = await fetchBonusTips(sid, profile);
       setBonusTips(data);
     } catch {
-      // tips are non-critical, fail silently
+      // non-critical, fail silently
     } finally {
       setTipsLoading(false);
     }
@@ -223,19 +237,9 @@ export default function App() {
     setSelectedSection(null);
   };
 
-  const handleExport = async () => {
-    if (!sessionId) return;
-    setExportLoading(true);
-    setError(null);
-    try {
-      const data = await fetchExportSummary(sessionId, revisedSections);
-      const profileLabel = PROFILES.find(p => p.value === profile)?.label || profile;
-      downloadPdf(data.changes, data.fullPaper, profileLabel);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setExportLoading(false);
-    }
+  const handleExport = () => {
+    if (!structured) return;
+    buildAndDownload(structured, revisedSections, profile);
   };
 
   const handlePdfUpload = async (e) => {
@@ -341,10 +345,9 @@ export default function App() {
             <button
               className="btn btn-outline"
               onClick={handleExport}
-              disabled={exportLoading}
               style={{ marginTop: '8px' }}
             >
-              {exportLoading ? 'Preparing export…' : hasRevisions ? 'Download revised paper' : 'Download paper summary'}
+              {hasRevisions ? 'Download revised paper' : 'Download paper summary'}
             </button>
           )}
 
