@@ -228,9 +228,28 @@ export default function App() {
   };
 
   const handleApply = async () => {
-    if (!sessionId || !suggestion) return;
+    if (!suggestion) return;
+
+    // Always read section name from the suggestion object itself — never from
+    // selectedSection state which can be stale due to React batching.
+    const targetSection = suggestion.target_section || selectedSection;
+
+    if (!sessionId) {
+      setError('Session expired — please re-analyze your manuscript and try again.');
+      setSuggestion(null);
+      setSelectedSection(null);
+      return;
+    }
+
+    if (!targetSection) {
+      setError('Could not determine which section to apply. Please refine the section again.');
+      setSuggestion(null);
+      setSelectedSection(null);
+      return;
+    }
+
     try {
-      const data = await applySuggestion(sessionId, selectedSection, suggestion.revised_text);
+      const data = await applySuggestion(sessionId, targetSection, suggestion.revised_text);
       if (data.complianceReport) {
         const freshIssues = (data.complianceReport.issues || []).filter(
           issue => !dismissedIssues.some(d => d.section === issue.section && d.problem === issue.problem)
@@ -239,7 +258,7 @@ export default function App() {
         setReport(updatedReport);
       }
       if (data.structuredManuscript) setStructured(data.structuredManuscript);
-      setRevisedSections(prev => ({ ...prev, [selectedSection]: suggestion.revised_text }));
+      setRevisedSections(prev => ({ ...prev, [targetSection]: suggestion.revised_text }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -259,8 +278,6 @@ export default function App() {
     });
   };
 
-  // Calls /api/reanalyze which builds text from the session's current revised
-  // sections — not from the original textarea — so applied changes are reflected.
   const handleReanalyze = async () => {
     if (!sessionId) return;
     setLoading(true);
