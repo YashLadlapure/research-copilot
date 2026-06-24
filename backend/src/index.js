@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const analyzeRouter = require('./routes/analyze');
+const reanalyzeRouter = require('./routes/reanalyze');
 const refineSectionRouter = require('./routes/refineSection');
 const applySuggestionRouter = require('./routes/applySuggestion');
 const extractPdfRouter = require('./routes/extractPdf');
@@ -32,6 +33,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/analyze', analyzeRouter);
+app.use('/api/reanalyze', reanalyzeRouter);
 app.use('/api/refine-section', refineSectionRouter);
 app.use('/api/apply-suggestion', applySuggestionRouter);
 app.use('/api/extract-pdf', extractPdfRouter);
