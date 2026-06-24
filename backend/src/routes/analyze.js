@@ -32,6 +32,38 @@ function normalizeText(text) {
   return text.trim().replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
 }
 
+// Split plain text into section bodies keyed by lowercase section name
+function extractSectionBodies(text, detectedSections) {
+  const bodies = {};
+  const lines = text.split('\n');
+  let currentSection = null;
+  let buffer = [];
+
+  const headingPattern = new RegExp(
+    `^\\s*(?:\\d+\\.?\\s*)?(${detectedSections
+      .map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|')})\\s*$`,
+    'i'
+  );
+
+  for (const line of lines) {
+    const match = line.match(headingPattern);
+    if (match) {
+      if (currentSection && buffer.length) {
+        bodies[currentSection] = buffer.join('\n').trim();
+      }
+      currentSection = match[1].toLowerCase().replace(/^conclusions$/, 'conclusion');
+      buffer = [];
+    } else if (currentSection) {
+      buffer.push(line);
+    }
+  }
+  if (currentSection && buffer.length) {
+    bodies[currentSection] = buffer.join('\n').trim();
+  }
+  return bodies;
+}
+
 function mapToStructured(geminiJson) {
   return {
     title: geminiJson.title || '',
@@ -82,16 +114,25 @@ router.post('/', async (req, res) => {
       s => !mergedDetected.map(d => d.toLowerCase()).includes(s.toLowerCase())
     );
 
-    // if regex found references/bibliography, trust it over Gemini's referencesPresent=false
     const referencesPresent =
       base.referencesPresent ||
       mergedDetected.some(s => s.toLowerCase() === 'references' || s.toLowerCase() === 'bibliography');
+
+    // extract body text for every detected section so refine can read it
+    const sectionBodies = extractSectionBodies(normalizedText, mergedDetected);
+    // always include title and abstract from Gemini in the sections map
+    if (base.title) sectionBodies['title'] = sectionBodies['title'] || base.title;
+    if (base.abstract) sectionBodies['abstract'] = sectionBodies['abstract'] || base.abstract;
+    if (base.keywords && base.keywords.length) {
+      sectionBodies['keywords'] = sectionBodies['keywords'] || base.keywords.join(', ');
+    }
 
     structuredManuscript = {
       ...base,
       sectionsDetected: mergedDetected,
       sectionsMissing: mergedMissing,
       referencesPresent,
+      sections: sectionBodies,
     };
   } catch (err) {
     return res.status(502).json({ error: err.message });

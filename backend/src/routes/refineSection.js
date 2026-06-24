@@ -33,6 +33,26 @@ function buildConstraints(targetSection, complianceReport, profileConfig) {
   return constraints;
 }
 
+// Fallback: extract a section's text from raw normalizedText using heading detection
+function extractFromRawText(normalizedText, targetSection) {
+  if (!normalizedText) return null;
+  const lines = normalizedText.split('\n');
+  const escaped = targetSection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const headingRe = new RegExp(`^\\s*(?:\\d+\\.?\\s*)?${escaped}\\s*$`, 'i');
+  const anyHeadingRe = /^\s*(?:\d+\.?\s*)?[A-Z][A-Za-z ]{2,40}\s*$/;
+
+  let inSection = false;
+  const buffer = [];
+  for (const line of lines) {
+    if (headingRe.test(line)) { inSection = true; continue; }
+    if (inSection) {
+      if (anyHeadingRe.test(line) && line.trim().length > 0) break;
+      buffer.push(line);
+    }
+  }
+  return buffer.length ? buffer.join('\n').trim() : null;
+}
+
 router.post('/', async (req, res) => {
   const { sessionId, targetSection, mode = 'strict' } = req.body;
 
@@ -50,18 +70,24 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'No structured manuscript found. Run Analyze first.' });
   }
 
-  // sections live inside structured.sections, not at the top level
-  const sectionMap = structured.sections || structured;
+  // sections map lives in structured.sections
+  const sectionMap = structured.sections || {};
 
   const sectionKey =
     Object.keys(sectionMap).find((k) => k === targetSection) ||
     Object.keys(sectionMap).find((k) => k.toLowerCase() === targetSection.toLowerCase()) ||
     Object.keys(sectionMap).find((k) => k.toLowerCase().includes(targetSection.toLowerCase()));
 
-  const originalText = sectionKey ? sectionMap[sectionKey] : null;
+  let originalText = sectionKey ? sectionMap[sectionKey] : null;
+
+  // fallback: scan raw text if not in the sections map
+  if (!originalText) {
+    originalText = extractFromRawText(session.normalizedText, targetSection);
+  }
+
   if (!originalText) {
     return res.status(400).json({
-      error: `Section "${targetSection}" not found. Available: ${Object.keys(sectionMap).join(', ')}`,
+      error: `Section "${targetSection}" text could not be located. Try re-analyzing the manuscript.`,
     });
   }
 
