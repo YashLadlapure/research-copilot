@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { randomUUID } = require('crypto');
 const { getProfileConfig } = require('../profiles/index');
 const { createSession, getSession, updateSession } = require('../store');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
@@ -88,13 +89,11 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
-  // Re-score path: use the already-updated structuredManuscript from the session
-  // (which includes any applied revisions) rather than the stale original.
   if (existingSessionId) {
     const existing = getSession(existingSessionId);
     if (existing && existing.structuredManuscript) {
       const newReport = evaluateCompliance(existing.structuredManuscript, profileConfig);
-      updateSession(existingSessionId, { complianceReport: newReport });
+      updateSession(existingSessionId, { complianceReport: newReport, profile });
       return res.json({
         sessionId: existingSessionId,
         structuredManuscript: existing.structuredManuscript,
@@ -139,7 +138,7 @@ router.post('/', async (req, res) => {
   }
 
   const complianceReport = evaluateCompliance(structuredManuscript, profileConfig);
-  const sessionId = Date.now().toString();
+  const sessionId = randomUUID();
 
   createSession({
     id: sessionId,

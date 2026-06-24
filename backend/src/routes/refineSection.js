@@ -33,20 +33,14 @@ function buildConstraints(targetSection, complianceReport, profileConfig) {
   return constraints;
 }
 
-// Extract a section's text from raw normalizedText using heading detection.
-// Bug fix: only break out of a section when we hit a heading at the SAME or
-// HIGHER level (i.e. not a sub-heading like "3.1 System Design").
 function extractFromRawText(normalizedText, targetSection) {
   if (!normalizedText) return null;
   const lines = normalizedText.split('\n');
   const escaped = targetSection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  // match the target heading — optionally prefixed by a single top-level number
   const headingRe = new RegExp(`^\\s*(?:\\d+\\.?\\s*)?${escaped}\\s*$`, 'i');
-
-  // a top-level section heading: optional single digit, NOT a sub-heading (no dot after digit)
   const topLevelHeadingRe = /^\s*(?:\d+\.?\s*)?[A-Z][A-Za-z ]{2,40}\s*$/;
-  const subHeadingRe = /^\s*\d+\.\d+/;  // "3.1 ...", "3.1.2 ..." — never break on these
+  const subHeadingRe = /^\s*\d+\.\d+/;
 
   let inSection = false;
   const buffer = [];
@@ -56,8 +50,6 @@ function extractFromRawText(normalizedText, targetSection) {
       continue;
     }
     if (inSection) {
-      // only treat line as a section break if it looks like a top-level heading
-      // AND is NOT a sub-heading
       if (
         topLevelHeadingRe.test(line) &&
         !subHeadingRe.test(line) &&
@@ -87,11 +79,12 @@ router.post('/', async (req, res) => {
   }
 
   const sectionMap = structured.sections || {};
+  const targetLower = targetSection.toLowerCase();
 
+  // exact match first, then case-insensitive exact, NO partial/includes fallback
   const sectionKey =
-    Object.keys(sectionMap).find((k) => k === targetSection) ||
-    Object.keys(sectionMap).find((k) => k.toLowerCase() === targetSection.toLowerCase()) ||
-    Object.keys(sectionMap).find((k) => k.toLowerCase().includes(targetSection.toLowerCase()));
+    Object.keys(sectionMap).find(k => k === targetSection) ||
+    Object.keys(sectionMap).find(k => k.toLowerCase() === targetLower);
 
   let originalText = sectionKey ? sectionMap[sectionKey] : null;
 

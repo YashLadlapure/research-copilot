@@ -21,12 +21,10 @@ const SEVERITY_COLOR = {
 };
 
 // Sections that must never be sent to Gemini for auto-rewrite.
-// Includes both real non-refinable sections AND the synthetic tag names
-// the rule engine may emit before they are remapped by the backend.
 const NON_REFINABLE = new Set([
   'references', 'bibliography',
-  // synthetic tags — resolved on backend but guard here too
-  'language', 'metadata', 'structure', 'figures', 'tables', 'acknowledgements',
+  // synthetic tags resolved on backend
+  'language', 'metadata', 'structure', 'figures', 'tables',
 ]);
 
 const DASHBOARD_TABS = ['Overview', 'Structure', 'Language', 'Tips', 'AI Disclosure'];
@@ -53,12 +51,6 @@ function scoreSubtitle(score, issues) {
   if (score >= 80) return `Strong draft${critical.length ? `, needs ${critical.map(i => i.section).join(' and ')} cleanup` : ''}.`;
   if (score >= 60) return `Good structure, ${critical.length} critical issue${critical.length > 1 ? 's' : ''} to resolve.`;
   return `${critical.length} critical and ${review.length} review issues found.`;
-}
-
-function recalcScore(issues) {
-  const criticalCount = issues.filter(i => i.severity === 'Critical').length;
-  const reviewCount = issues.filter(i => i.severity === 'Review').length;
-  return Math.max(0, 100 - criticalCount * 20 - reviewCount * 5);
 }
 
 function sortIssues(issues) {
@@ -141,7 +133,6 @@ export default function App() {
   const [text, setText] = useState('');
   const [profile, setProfile] = useState('lncs');
   const [refineMode, setRefineMode] = useState('strict');
-  const [paperTitle, setPaperTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [refiningSection, setRefiningSection] = useState(null);
   const [exportLoading, setExportLoading] = useState(false);
@@ -201,7 +192,7 @@ export default function App() {
 
   const handleRefine = async (section) => {
     if (!sessionId || loading || refiningSection) return;
-    if (isNonRefinable(section)) return;  // safety guard
+    if (isNonRefinable(section)) return;
     setSelectedSection(section);
     setRefiningSection(section);
     setSuggestion(null);
@@ -231,10 +222,10 @@ export default function App() {
         const freshIssues = (data.complianceReport.issues || []).filter(
           issue => !dismissedIssues.some(d => d.section === issue.section && d.problem === issue.problem)
         );
+        // use backend score, not a local recalculation
         const updatedReport = {
           ...data.complianceReport,
           issues: freshIssues,
-          overallScore: recalcScore(freshIssues),
         };
         setReport(updatedReport);
       }
@@ -255,7 +246,13 @@ export default function App() {
       const remaining = prev.issues.filter(
         i => !(i.section === issue.section && i.problem === issue.problem)
       );
-      return { ...prev, issues: remaining, overallScore: recalcScore(remaining) };
+      const criticalCount = remaining.filter(i => i.severity === 'Critical').length;
+      const reviewCount = remaining.filter(i => i.severity === 'Review').length;
+      return {
+        ...prev,
+        issues: remaining,
+        overallScore: Math.max(0, 100 - criticalCount * 20 - reviewCount * 5),
+      };
     });
   };
 
@@ -265,12 +262,13 @@ export default function App() {
     setError(null);
     setSuggestion(null);
     setSelectedSection(null);
+    setRevisedSections({});
+    setDismissedIssues([]);
     try {
       const data = await analyzeManuscript(text, profile, sessionId);
       setSessionId(data.sessionId);
       setStructured(data.structuredManuscript);
       setReport(data.complianceReport);
-      setDismissedIssues([]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -330,10 +328,11 @@ export default function App() {
     const base = visibleIssues(report.issues);
     if (tab === 'Overview') return sortIssues(base);
     if (tab === 'Structure') return sortIssues(base.filter(i =>
-      ['abstract', 'introduction', 'conclusion', 'methodology', 'results'].includes((i.section || '').toLowerCase())
+      ['abstract', 'introduction', 'conclusion', 'methodology', 'results',
+       'discussion', 'background', 'future work', 'future scope', 'results and discussion'].includes((i.section || '').toLowerCase())
     ));
     if (tab === 'Language') return sortIssues(base.filter(i =>
-      ['keywords', 'title', 'abstract', 'introduction'].includes((i.section || '').toLowerCase())
+      ['keywords', 'title', 'abstract', 'introduction', 'conclusion'].includes((i.section || '').toLowerCase())
     ));
     return [];
   };
@@ -392,9 +391,6 @@ export default function App() {
           <select className="select" value={profile} onChange={(e) => setProfile(e.target.value)}>
             {PROFILES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
-
-          <label className="field-label">Paper title <span className="field-optional">(optional)</span></label>
-          <input className="input" type="text" placeholder="e.g. A Heuristic Approach to…" value={paperTitle} onChange={(e) => setPaperTitle(e.target.value)} />
 
           <label className="field-label">Preserve meaning mode</label>
           <select className="select" value={refineMode} onChange={(e) => setRefineMode(e.target.value)}>

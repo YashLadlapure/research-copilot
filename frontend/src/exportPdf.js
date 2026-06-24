@@ -8,7 +8,7 @@ const LINE_H = 7;
 
 const PUBLICATION_TIPS = {
   lncs: [
-    'Abstract must be 150 words or fewer — hard limit for Springer LNCS.',
+    'Abstract must be between 70–150 words — this is a hard limit for Springer LNCS.',
     'Use exactly 4–6 keywords; avoid generic terms like "deep learning" alone.',
     'Springer LNCS requires numbered sections (1 Introduction, 2 Methodology…).',
     'Figures and tables must have captions and be cross-referenced in the text.',
@@ -136,7 +136,6 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
     y = drawDivider(doc, y);
     y += 4;
 
-    // warning header with amber background
     doc.setFillColor(120, 80, 10);
     doc.roundedRect(MARGIN, y - 4, TEXT_W, 10, 2, 2, 'F');
     doc.setFontSize(11);
@@ -153,10 +152,7 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
 
     manualWarnings.forEach((warning, i) => {
       if (y > PAGE_H - 30) { doc.addPage(); y = MARGIN + 6; }
-
-      // item number + title
       y = writeLine(doc, `${i + 1})  ${warning.title}`, MARGIN, y, { size: 10, bold: true, color: [30, 30, 30] });
-      // rule note indented
       y = writeWrapped(doc, `\u27a2  ${warning.rule}`, MARGIN + 5, y, TEXT_W - 5, { size: 9, color: [80, 80, 80] });
       y += 4;
     });

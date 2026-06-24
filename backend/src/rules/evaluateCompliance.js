@@ -64,19 +64,15 @@ function checkTitleCase(title) {
   const words = title.trim().split(/\s+/);
   const violations = [];
   words.forEach((word, i) => {
-    // strip leading non-alpha chars (colons, quotes, etc.) before checking case
     const clean = word.replace(/^[^a-zA-Z]+/, '').replace(/[^a-zA-Z]+$/, '');
     if (!clean) return;
     const isFirst = i === 0;
     const lower = clean.toLowerCase();
     if (isFirst) {
-      // first word must always be capitalised — never flag it
       return;
     } else if (skipWords.has(lower)) {
-      // skip words mid-title must be lowercase
       if (clean[0] !== clean[0].toLowerCase()) violations.push(word);
     } else {
-      // all other words must start uppercase
       if (clean[0] !== clean[0].toUpperCase()) violations.push(word);
     }
   });
@@ -106,11 +102,6 @@ function checkEmailPresence(fullText) {
   return { count: emails.length, hasEmail: emails.length > 0 };
 }
 
-function checkOrcidPresence(fullText) {
-  const orcid = (fullText.match(/\d{4}-\d{4}-\d{4}-\d{4}/g) || []).length;
-  return { count: orcid, present: orcid > 0 };
-}
-
 // ─── manual warnings per profile ─────────────────────────────────────────────
 
 const MANUAL_WARNINGS = {
@@ -136,13 +127,11 @@ const MANUAL_WARNINGS = {
 };
 
 // ─── section tag → nearest real refinable section ────────────────────────────
-// Synthetic tags used by rule checks that don't map to a real manuscript section.
-// We remap them so the frontend can offer a useful refine target instead of crashing.
 const SYNTHETIC_SECTION_MAP = {
-  language:        'introduction',  // acronym issues — first-use context lives in intro
-  metadata:        'title',         // author/affiliation/email issues live near the title block
-  structure:       'introduction',  // page-count / heading-depth issues
-  figures:         'methodology',   // figure captions usually in methodology / results
+  language:        'introduction',
+  metadata:        'title',
+  structure:       'introduction',
+  figures:         'methodology',
   tables:          'methodology',
   acknowledgements:'acknowledgements',
 };
@@ -152,7 +141,6 @@ function resolveSection(rawSection, sectionsDetected) {
   const lower = rawSection.toLowerCase();
   if (SYNTHETIC_SECTION_MAP[lower]) {
     const preferred = SYNTHETIC_SECTION_MAP[lower];
-    // only remap to a section that actually exists in this manuscript
     const exists = (sectionsDetected || []).some(s => s.toLowerCase() === preferred);
     return exists ? preferred : (sectionsDetected && sectionsDetected[0]) || preferred;
   }
@@ -184,7 +172,6 @@ function evaluateCompliance(structured, profileConfig) {
   const profile = profileConfig.id || 'lncs';
   const title = structured.title || '';
 
-  // helper: push an issue with synthetic section resolved to a real section
   function addIssue(issue) {
     issues.push({
       ...issue,

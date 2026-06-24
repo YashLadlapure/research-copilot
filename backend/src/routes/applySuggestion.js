@@ -15,44 +15,26 @@ function parseKeywords(value) {
 
 function rebuildStructured(structured, targetSection, revisedText) {
   const secLower = targetSection.toLowerCase();
-
-  // always write into structured.sections (the body map)
   const updatedSections = { ...(structured.sections || {}) };
 
   if (secLower === 'keywords') {
     const parsed = parseKeywords(revisedText);
     updatedSections['keywords'] = parsed.join(', ');
-    return {
-      ...structured,
-      keywords: parsed,
-      sections: updatedSections,
-    };
+    return { ...structured, keywords: parsed, sections: updatedSections };
   }
 
   if (secLower === 'abstract') {
     updatedSections['abstract'] = revisedText;
-    return {
-      ...structured,
-      abstract: revisedText,
-      sections: updatedSections,
-    };
+    return { ...structured, abstract: revisedText, sections: updatedSections };
   }
 
   if (secLower === 'title') {
     updatedSections['title'] = revisedText;
-    return {
-      ...structured,
-      title: revisedText,
-      sections: updatedSections,
-    };
+    return { ...structured, title: revisedText, sections: updatedSections };
   }
 
-  // all other sections (introduction, conclusion, methodology, etc.)
   updatedSections[secLower] = revisedText;
-  return {
-    ...structured,
-    sections: updatedSections,
-  };
+  return { ...structured, sections: updatedSections };
 }
 
 router.post('/', (req, res) => {
@@ -60,6 +42,10 @@ router.post('/', (req, res) => {
 
   if (!sessionId || !targetSection) {
     return res.status(400).json({ error: '"sessionId" and "targetSection" are required.' });
+  }
+
+  if (!revisedText || !revisedText.trim()) {
+    return res.status(400).json({ error: '"revisedText" is required and cannot be empty.' });
   }
 
   const session = getSession(sessionId);
@@ -70,7 +56,6 @@ router.post('/', (req, res) => {
   const structured = session.structuredManuscript;
   const secLower = targetSection.toLowerCase();
 
-  // verify the section actually exists (top-level or in sections map)
   const sectionMap = structured.sections || {};
   const topLevelKeys = ['title', 'abstract', 'keywords'];
   const existsInMap = Object.keys(sectionMap).some(k => k.toLowerCase() === secLower);
@@ -85,9 +70,7 @@ router.post('/', (req, res) => {
     });
   }
 
-  const updatedManuscript = revisedText
-    ? rebuildStructured(structured, targetSection, revisedText)
-    : structured;
+  const updatedManuscript = rebuildStructured(structured, targetSection, revisedText);
 
   let profileConfig;
   try {

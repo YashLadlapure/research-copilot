@@ -12,7 +12,19 @@ const exportSummaryRouter = require('./routes/exportSummary');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o.trim()))) {
+      cb(null, true);
+    } else {
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    }
+  },
+}));
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (req, res) => {
