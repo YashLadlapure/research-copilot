@@ -20,7 +20,15 @@ const SEVERITY_COLOR = {
   Good: '#22c55e',
 };
 
-const NON_REFINABLE = ['references', 'bibliography'];
+// Sections that must never be sent to Gemini for auto-rewrite.
+// Includes both real non-refinable sections AND the synthetic tag names
+// the rule engine may emit before they are remapped by the backend.
+const NON_REFINABLE = new Set([
+  'references', 'bibliography',
+  // synthetic tags — resolved on backend but guard here too
+  'language', 'metadata', 'structure', 'figures', 'tables', 'acknowledgements',
+]);
+
 const DASHBOARD_TABS = ['Overview', 'Structure', 'Language', 'Tips', 'AI Disclosure'];
 const SECTION_ORDER = ['title', 'abstract', 'keywords', 'introduction', 'methodology', 'results', 'conclusion', 'references'];
 
@@ -93,15 +101,23 @@ function ApaGuide() {
   );
 }
 
+function isNonRefinable(section) {
+  return NON_REFINABLE.has((section || '').toLowerCase());
+}
+
 function getActionButtons(issue, onRefine, loading, onDismiss) {
   const sec = (issue.section || '').toLowerCase();
-  if (NON_REFINABLE.includes(sec)) {
+
+  if (isNonRefinable(sec)) {
+    const isRef = sec === 'references' || sec === 'bibliography';
     return (
       <div className="issue-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
         <div className="issue-manual-note">
-          ⚠️ Must be fixed manually — references cannot be auto-edited to avoid citation errors.
+          {isRef
+            ? '⚠️ Must be fixed manually — references cannot be auto-edited to avoid citation errors.'
+            : '⚠️ This issue requires manual correction in your manuscript.'}
         </div>
-        <ApaGuide />
+        {isRef && <ApaGuide />}
         <button
           className="action-btn action-btn--ghost"
           style={{ marginTop: '8px', fontSize: '0.75rem' }}
@@ -112,6 +128,7 @@ function getActionButtons(issue, onRefine, loading, onDismiss) {
       </div>
     );
   }
+
   const label = sec === 'abstract' ? 'Improve abstract' : sec === 'keywords' ? 'Suggest keywords' : 'Refine section';
   return (
     <div className="issue-actions">
@@ -184,6 +201,7 @@ export default function App() {
 
   const handleRefine = async (section) => {
     if (!sessionId || loading || refiningSection) return;
+    if (isNonRefinable(section)) return;  // safety guard
     setSelectedSection(section);
     setRefiningSection(section);
     setSuggestion(null);
@@ -201,8 +219,7 @@ export default function App() {
 
   const handleSectionRowClick = (sectionName) => {
     if (!sessionId || loading || refiningSection) return;
-    const sec = sectionName.toLowerCase();
-    if (NON_REFINABLE.includes(sec)) return;
+    if (isNonRefinable(sectionName)) return;
     handleRefine(sectionName);
   };
 
@@ -316,7 +333,7 @@ export default function App() {
       ['abstract', 'introduction', 'conclusion', 'methodology', 'results'].includes((i.section || '').toLowerCase())
     ));
     if (tab === 'Language') return sortIssues(base.filter(i =>
-      ['keywords', 'title', 'abstract'].includes((i.section || '').toLowerCase())
+      ['keywords', 'title', 'abstract', 'introduction'].includes((i.section || '').toLowerCase())
     ));
     return [];
   };
@@ -479,7 +496,7 @@ export default function App() {
 
               {activeTab === 'Tips' && (
                 <div className="tips-card">
-                  <p className="tips-title">&#x2728; Bonus tips for {profileLabel}</p>
+                  <p className="tips-title">✨ Bonus tips for {profileLabel}</p>
                   {tipsLoading && <div className="tips-loading">Asking Gemini for publication tips…</div>}
                   {!tipsLoading && bonusTips?.tips && (
                     <ol className="tips-list">
@@ -534,10 +551,10 @@ export default function App() {
                       <h3 className="section-heading">Detected paper sections</h3>
                       <div className="section-rows">
                         {buildSectionRows().map(s => {
-                          const isNonRefinable = NON_REFINABLE.includes(s.name.toLowerCase());
+                          const secNonRefinable = isNonRefinable(s.name);
                           const isMissing = s.status === 'Missing';
                           const isThisRefining = refiningSection === s.name;
-                          const clickable = sessionId && !isNonRefinable && !isMissing && !isRefining;
+                          const clickable = sessionId && !secNonRefinable && !isMissing && !isRefining;
                           return (
                             <div
                               key={s.name}

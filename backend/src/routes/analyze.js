@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getProfileConfig } = require('../profiles/index');
-const { createSession, getSession } = require('../store');
+const { createSession, getSession, updateSession } = require('../store');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
 const { extractSections } = require('../ai/geminiClient');
 
@@ -32,7 +32,6 @@ function normalizeText(text) {
   return text.trim().replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
 }
 
-// Split plain text into section bodies keyed by lowercase section name
 function extractSectionBodies(text, detectedSections) {
   const bodies = {};
   const lines = text.split('\n');
@@ -89,10 +88,13 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
+  // Re-score path: use the already-updated structuredManuscript from the session
+  // (which includes any applied revisions) rather than the stale original.
   if (existingSessionId) {
     const existing = getSession(existingSessionId);
     if (existing && existing.structuredManuscript) {
       const newReport = evaluateCompliance(existing.structuredManuscript, profileConfig);
+      updateSession(existingSessionId, { complianceReport: newReport });
       return res.json({
         sessionId: existingSessionId,
         structuredManuscript: existing.structuredManuscript,
@@ -118,9 +120,7 @@ router.post('/', async (req, res) => {
       base.referencesPresent ||
       mergedDetected.some(s => s.toLowerCase() === 'references' || s.toLowerCase() === 'bibliography');
 
-    // extract body text for every detected section so refine can read it
     const sectionBodies = extractSectionBodies(normalizedText, mergedDetected);
-    // always include title and abstract from Gemini in the sections map
     if (base.title) sectionBodies['title'] = sectionBodies['title'] || base.title;
     if (base.abstract) sectionBodies['abstract'] = sectionBodies['abstract'] || base.abstract;
     if (base.keywords && base.keywords.length) {

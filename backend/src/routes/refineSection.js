@@ -33,20 +33,36 @@ function buildConstraints(targetSection, complianceReport, profileConfig) {
   return constraints;
 }
 
-// Fallback: extract a section's text from raw normalizedText using heading detection
+// Extract a section's text from raw normalizedText using heading detection.
+// Bug fix: only break out of a section when we hit a heading at the SAME or
+// HIGHER level (i.e. not a sub-heading like "3.1 System Design").
 function extractFromRawText(normalizedText, targetSection) {
   if (!normalizedText) return null;
   const lines = normalizedText.split('\n');
   const escaped = targetSection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // match the target heading — optionally prefixed by a single top-level number
   const headingRe = new RegExp(`^\\s*(?:\\d+\\.?\\s*)?${escaped}\\s*$`, 'i');
-  const anyHeadingRe = /^\s*(?:\d+\.?\s*)?[A-Z][A-Za-z ]{2,40}\s*$/;
+
+  // a top-level section heading: optional single digit, NOT a sub-heading (no dot after digit)
+  const topLevelHeadingRe = /^\s*(?:\d+\.?\s*)?[A-Z][A-Za-z ]{2,40}\s*$/;
+  const subHeadingRe = /^\s*\d+\.\d+/;  // "3.1 ...", "3.1.2 ..." — never break on these
 
   let inSection = false;
   const buffer = [];
   for (const line of lines) {
-    if (headingRe.test(line)) { inSection = true; continue; }
+    if (headingRe.test(line)) {
+      inSection = true;
+      continue;
+    }
     if (inSection) {
-      if (anyHeadingRe.test(line) && line.trim().length > 0) break;
+      // only treat line as a section break if it looks like a top-level heading
+      // AND is NOT a sub-heading
+      if (
+        topLevelHeadingRe.test(line) &&
+        !subHeadingRe.test(line) &&
+        line.trim().length > 0
+      ) break;
       buffer.push(line);
     }
   }
@@ -70,7 +86,6 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'No structured manuscript found. Run Analyze first.' });
   }
 
-  // sections map lives in structured.sections
   const sectionMap = structured.sections || {};
 
   const sectionKey =
@@ -80,7 +95,6 @@ router.post('/', async (req, res) => {
 
   let originalText = sectionKey ? sectionMap[sectionKey] : null;
 
-  // fallback: scan raw text if not in the sections map
   if (!originalText) {
     originalText = extractFromRawText(session.normalizedText, targetSection);
   }

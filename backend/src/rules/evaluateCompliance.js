@@ -55,7 +55,6 @@ function titleEndsWithPeriod(title) {
 
 function checkTitleCase(title) {
   if (!title) return { passed: true };
-  // expanded skip list — articles, coordinating conjunctions, short prepositions
   const skipWords = new Set([
     'a', 'an', 'the',
     'and', 'but', 'for', 'or', 'nor', 'so', 'yet',
@@ -65,15 +64,19 @@ function checkTitleCase(title) {
   const words = title.trim().split(/\s+/);
   const violations = [];
   words.forEach((word, i) => {
-    const clean = word.replace(/[^a-zA-Z]/g, '');
+    // strip leading non-alpha chars (colons, quotes, etc.) before checking case
+    const clean = word.replace(/^[^a-zA-Z]+/, '').replace(/[^a-zA-Z]+$/, '');
     if (!clean) return;
     const isFirst = i === 0;
     const lower = clean.toLowerCase();
     if (isFirst) {
-      if (clean[0] !== clean[0].toUpperCase()) violations.push(word);
+      // first word must always be capitalised — never flag it
+      return;
     } else if (skipWords.has(lower)) {
+      // skip words mid-title must be lowercase
       if (clean[0] !== clean[0].toLowerCase()) violations.push(word);
     } else {
+      // all other words must start uppercase
       if (clean[0] !== clean[0].toUpperCase()) violations.push(word);
     }
   });
@@ -132,6 +135,30 @@ const MANUAL_WARNINGS = {
   ],
 };
 
+// ─── section tag → nearest real refinable section ────────────────────────────
+// Synthetic tags used by rule checks that don't map to a real manuscript section.
+// We remap them so the frontend can offer a useful refine target instead of crashing.
+const SYNTHETIC_SECTION_MAP = {
+  language:        'introduction',  // acronym issues — first-use context lives in intro
+  metadata:        'title',         // author/affiliation/email issues live near the title block
+  structure:       'introduction',  // page-count / heading-depth issues
+  figures:         'methodology',   // figure captions usually in methodology / results
+  tables:          'methodology',
+  acknowledgements:'acknowledgements',
+};
+
+function resolveSection(rawSection, sectionsDetected) {
+  if (!rawSection) return rawSection;
+  const lower = rawSection.toLowerCase();
+  if (SYNTHETIC_SECTION_MAP[lower]) {
+    const preferred = SYNTHETIC_SECTION_MAP[lower];
+    // only remap to a section that actually exists in this manuscript
+    const exists = (sectionsDetected || []).some(s => s.toLowerCase() === preferred);
+    return exists ? preferred : (sectionsDetected && sectionsDetected[0]) || preferred;
+  }
+  return rawSection;
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 function evaluateCompliance(structured, profileConfig) {
@@ -157,11 +184,19 @@ function evaluateCompliance(structured, profileConfig) {
   const profile = profileConfig.id || 'lncs';
   const title = structured.title || '';
 
+  // helper: push an issue with synthetic section resolved to a real section
+  function addIssue(issue) {
+    issues.push({
+      ...issue,
+      section: resolveSection(issue.section, structured.sectionsDetected),
+    });
+  }
+
   for (const required of profileConfig.requiredSections) {
     const found = allDetected.includes(required.toLowerCase()) && !allMissing.includes(required.toLowerCase());
     ruleChecks.push({ rule: `section_present_${required}`, passed: found, observedValue: found, expected: 'true' });
     if (!found) {
-      issues.push({ section: required, severity: 'Critical', problem: `Required section "${required}" was not detected.`, recommended_action: `Add a clearly labeled "${required}" section before submission.` });
+      addIssue({ section: required, severity: 'Critical', problem: `Required section "${required}" was not detected.`, recommended_action: `Add a clearly labeled "${required}" section before submission.` });
       sectionStatus.push({ name: required, status: 'Critical', summary: `"${required}" section is missing.` });
     } else {
       sectionStatus.push({ name: required, status: 'Good', summary: `"${required}" section detected.` });
@@ -174,11 +209,11 @@ function evaluateCompliance(structured, profileConfig) {
   const maxWords = profileConfig.abstractMaxWords;
   ruleChecks.push({ rule: 'abstract_word_count', passed: abstractWords >= minWords && abstractWords <= maxWords, observedValue: abstractWords, expected: `${minWords}\u2013${maxWords} words` });
   if (abstractWords === 0) {
-    issues.push({ section: 'abstract', severity: 'Critical', problem: 'Abstract is empty or could not be extracted.', recommended_action: 'Ensure the abstract is clearly labeled and contains content.' });
+    addIssue({ section: 'abstract', severity: 'Critical', problem: 'Abstract is empty or could not be extracted.', recommended_action: 'Ensure the abstract is clearly labeled and contains content.' });
   } else if (abstractWords > maxWords) {
-    issues.push({ section: 'abstract', severity: 'Critical', problem: `Abstract is ${abstractWords} words \u2014 exceeds the ${profileConfig.name} limit of ${maxWords} words.`, recommended_action: `Shorten the abstract to ${maxWords} words or fewer.` });
+    addIssue({ section: 'abstract', severity: 'Critical', problem: `Abstract is ${abstractWords} words \u2014 exceeds the ${profileConfig.name} limit of ${maxWords} words.`, recommended_action: `Shorten the abstract to ${maxWords} words or fewer.` });
   } else if (abstractWords < minWords) {
-    issues.push({ section: 'abstract', severity: 'Review', problem: `Abstract is ${abstractWords} words \u2014 below the ${profileConfig.name} minimum of ${minWords} words.`, recommended_action: `Expand the abstract to at least ${minWords} words.` });
+    addIssue({ section: 'abstract', severity: 'Review', problem: `Abstract is ${abstractWords} words \u2014 below the ${profileConfig.name} minimum of ${minWords} words.`, recommended_action: `Expand the abstract to at least ${minWords} words.` });
   }
 
   if (profileConfig.keywordsRequired) {
@@ -187,72 +222,72 @@ function evaluateCompliance(structured, profileConfig) {
     const kwLabel = profileConfig.keywordsLabel || 'Keywords';
     ruleChecks.push({ rule: 'keywords_count', passed: kwOk, observedValue: kwCount, expected: `${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel}` });
     if (kwCount === 0) {
-      issues.push({ section: 'keywords', severity: 'Critical', problem: `No ${kwLabel} detected.`, recommended_action: `Add ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel} directly after the abstract.` });
+      addIssue({ section: 'keywords', severity: 'Critical', problem: `No ${kwLabel} detected.`, recommended_action: `Add ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel} directly after the abstract.` });
     } else if (!kwOk) {
-      issues.push({ section: 'keywords', severity: 'Review', problem: `${kwCount} ${kwLabel} found. ${profileConfig.name} expects ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount}.`, recommended_action: `Adjust to ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel}.` });
+      addIssue({ section: 'keywords', severity: 'Review', problem: `${kwCount} ${kwLabel} found. ${profileConfig.name} expects ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount}.`, recommended_action: `Adjust to ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel}.` });
     }
   }
 
   if (profileConfig.referenceSectionRequired) {
     ruleChecks.push({ rule: 'references_present', passed: structured.referencesPresent, observedValue: structured.referencesPresent, expected: 'true' });
     if (!structured.referencesPresent) {
-      issues.push({ section: 'references', severity: 'Critical', problem: 'No references section detected.', recommended_action: `Add a references section in ${profileConfig.referenceStyle || 'numbered'} style.` });
+      addIssue({ section: 'references', severity: 'Critical', problem: 'No references section detected.', recommended_action: `Add a references section in ${profileConfig.referenceStyle || 'numbered'} style.` });
     }
   }
 
   const { numbered, authorYear } = detectCitationStyle(fullText);
   if (numbered === 0 && authorYear === 0 && structured.referencesPresent) {
-    issues.push({ section: 'references', severity: 'Review', problem: 'No inline citations detected in the manuscript body.', recommended_action: 'Add numbered citations [1] in the body text for every listed reference.' });
+    addIssue({ section: 'references', severity: 'Review', problem: 'No inline citations detected in the manuscript body.', recommended_action: 'Add numbered citations [1] in the body text for every listed reference.' });
   } else if ((profile === 'lncs' || profile === 'ieee') && authorYear > numbered && (numbered + authorYear) > 3) {
-    issues.push({ section: 'references', severity: 'Critical', problem: `${profileConfig.name} requires numbered citations [1][2], but author-year style (Author, 2024) was detected.`, recommended_action: 'Switch all inline citations to numbered format [1] and reformat the reference list.' });
+    addIssue({ section: 'references', severity: 'Critical', problem: `${profileConfig.name} requires numbered citations [1][2], but author-year style (Author, 2024) was detected.`, recommended_action: 'Switch all inline citations to numbered format [1] and reformat the reference list.' });
   }
   ruleChecks.push({ rule: 'citation_style', passed: authorYear <= numbered, observedValue: `numbered:${numbered} author-year:${authorYear}`, expected: 'numbered' });
 
   const badPunctCount = checkCitationPunctuation(fullText);
   if (badPunctCount > 2) {
-    issues.push({ section: 'references', severity: 'Review', problem: `${badPunctCount} citations appear without a space or punctuation before the bracket (e.g. "word[1]" \u2014 should be "word [1]" or "word.[1]").`, recommended_action: 'Add a space or period before each citation bracket.' });
+    addIssue({ section: 'references', severity: 'Review', problem: `${badPunctCount} citations appear without a space or punctuation before the bracket (e.g. "word[1]" \u2014 should be "word [1]" or "word.[1]").`, recommended_action: 'Add a space or period before each citation bracket.' });
   }
   ruleChecks.push({ rule: 'citation_punctuation', passed: badPunctCount <= 2, observedValue: badPunctCount, expected: '\u22642' });
 
   const refStyle = checkReferenceListStyle(refText);
   if (refText && refStyle.style === 'author-year' && (profile === 'lncs' || profile === 'ieee')) {
-    issues.push({ section: 'references', severity: 'Critical', problem: `Reference list uses author-year format. ${profileConfig.name} requires numbered references: [1] Author, Title, Venue, Year.`, recommended_action: `Reformat all references to numbered style as required by ${profileConfig.name}.` });
+    addIssue({ section: 'references', severity: 'Critical', problem: `Reference list uses author-year format. ${profileConfig.name} requires numbered references: [1] Author, Title, Venue, Year.`, recommended_action: `Reformat all references to numbered style as required by ${profileConfig.name}.` });
   }
   ruleChecks.push({ rule: 'reference_list_style', passed: refStyle.style !== 'author-year', observedValue: refStyle.style, expected: 'numbered' });
 
   const titleHasPeriod = titleEndsWithPeriod(title);
   ruleChecks.push({ rule: 'title_no_trailing_period', passed: !titleHasPeriod, observedValue: titleHasPeriod ? 'ends with period' : 'ok', expected: 'no trailing period' });
   if (title && titleHasPeriod) {
-    issues.push({ section: 'title', severity: 'Critical', problem: 'The paper title must not end with a period.', recommended_action: 'Remove the trailing period from the paper title.' });
+    addIssue({ section: 'title', severity: 'Critical', problem: 'The paper title must not end with a period.', recommended_action: 'Remove the trailing period from the paper title.' });
   }
 
   const titleCaseCheck = checkTitleCase(title);
   ruleChecks.push({ rule: 'title_case', passed: titleCaseCheck.passed, observedValue: titleCaseCheck.violations?.join(', ') || 'ok', expected: 'principal words capitalized' });
   if (title && !titleCaseCheck.passed && titleCaseCheck.violations?.length > 0) {
-    issues.push({ section: 'title', severity: 'Review', problem: `Title case issue: "${titleCaseCheck.violations.join(', ')}" may not follow LNCS capitalization rules (capitalize nouns, verbs, adjectives; lowercase articles and short prepositions).`, recommended_action: 'Review title capitalization against the LNCS heading style guide.' });
+    addIssue({ section: 'title', severity: 'Review', problem: `Title case issue: "${titleCaseCheck.violations.join(', ')}" may not follow LNCS capitalization rules (capitalize nouns, verbs, adjectives; lowercase articles and short prepositions).`, recommended_action: 'Review title capitalization against the LNCS heading style guide.' });
   }
 
   const affiliation = checkAffiliationCompleteness(fullText);
   ruleChecks.push({ rule: 'affiliation_completeness', passed: affiliation.passed, observedValue: JSON.stringify(affiliation), expected: 'institution + country' });
   if (!affiliation.passed) {
-    issues.push({ section: 'metadata', severity: 'Review', problem: `Author affiliation appears incomplete. ${profileConfig.name} requires institution name, town/city, and country for every author.`, recommended_action: 'Add full affiliation including Department, University, City, and Country for each author.' });
+    addIssue({ section: 'metadata', severity: 'Review', problem: `Author affiliation appears incomplete. ${profileConfig.name} requires institution name, town/city, and country for every author.`, recommended_action: 'Add full affiliation including Department, University, City, and Country for each author.' });
   }
 
   const emailCheck = checkEmailPresence(fullText);
   ruleChecks.push({ rule: 'email_present', passed: emailCheck.hasEmail, observedValue: `${emailCheck.count} email(s)`, expected: '\u22651 email' });
   if (!emailCheck.hasEmail) {
-    issues.push({ section: 'metadata', severity: 'Review', problem: 'No author email address detected.', recommended_action: `${profileConfig.name} requires at least the corresponding author\u2019s email address to be listed under the affiliation.` });
+    addIssue({ section: 'metadata', severity: 'Review', problem: 'No author email address detected.', recommended_action: `${profileConfig.name} requires at least the corresponding author\u2019s email address to be listed under the affiliation.` });
   }
 
   const headingDepth = checkHeadingDepth(fullText);
   ruleChecks.push({ rule: 'heading_depth', passed: !headingDepth.tooDeep, observedValue: headingDepth.level4 > 0 ? 'Level 4+ detected' : 'ok', expected: 'max 3 numbered levels' });
   if (headingDepth.tooDeep) {
-    issues.push({ section: 'structure', severity: 'Review', problem: 'Heading depth exceeds the recommended maximum. LNCS and IEEE allow a maximum of 3 numbered heading levels.', recommended_action: 'Reduce heading depth to 3 levels or fewer. Use run-in headings for Level 3 and Level 4.' });
+    addIssue({ section: 'structure', severity: 'Review', problem: 'Heading depth exceeds the recommended maximum. LNCS and IEEE allow a maximum of 3 numbered heading levels.', recommended_action: 'Reduce heading depth to 3 levels or fewer. Use run-in headings for Level 3 and Level 4.' });
   }
 
   const ackCheck = checkAcknowledgements(fullText);
   if (ackCheck.present && ackCheck.numbered) {
-    issues.push({ section: 'acknowledgements', severity: 'Review', problem: 'Acknowledgements section appears to be numbered. LNCS requires the Acknowledgements section to be unnumbered.', recommended_action: 'Remove the section number from the Acknowledgements heading.' });
+    addIssue({ section: 'acknowledgements', severity: 'Review', problem: 'Acknowledgements section appears to be numbered. LNCS requires the Acknowledgements section to be unnumbered.', recommended_action: 'Remove the section number from the Acknowledgements heading.' });
     ruleChecks.push({ rule: 'acknowledgements_unnumbered', passed: false, observedValue: 'numbered', expected: 'unnumbered' });
   }
 
@@ -261,7 +296,7 @@ function evaluateCompliance(structured, profileConfig) {
     const figOk = profile === 'lncs' ? figCheck.lncsCount > 0 : figCheck.ieeeCount > 0;
     ruleChecks.push({ rule: 'figure_caption_format', passed: figOk, observedValue: JSON.stringify(figCheck), expected: 'correct format' });
     if (!figOk) {
-      issues.push({
+      addIssue({
         section: 'figures',
         severity: 'Review',
         problem: profile === 'lncs'
@@ -277,7 +312,7 @@ function evaluateCompliance(structured, profileConfig) {
   const tableCheck = checkTableCaptions(fullText);
   if (tableCheck.hasTables && tableCheck.correctCount === 0) {
     ruleChecks.push({ rule: 'table_caption_format', passed: false, observedValue: 0, expected: 'Table N. format' });
-    issues.push({
+    addIssue({
       section: 'tables',
       severity: 'Review',
       problem: 'Tables detected but captions are not in the required format.',
@@ -290,7 +325,7 @@ function evaluateCompliance(structured, profileConfig) {
   const undefinedAcr = findUndefinedAcronyms(fullText);
   ruleChecks.push({ rule: 'acronym_definitions', passed: undefinedAcr.length === 0, observedValue: undefinedAcr.join(', ') || 'none', expected: 'all defined on first use' });
   if (undefinedAcr.length > 0) {
-    issues.push({ section: 'language', severity: 'Review', problem: `${undefinedAcr.length} acronym(s) used without definition on first use: ${undefinedAcr.join(', ')}.`, recommended_action: 'Define each acronym on first use, e.g. "Convolutional Neural Network (CNN)".' });
+    addIssue({ section: 'language', severity: 'Review', problem: `${undefinedAcr.length} acronym(s) used without definition on first use: ${undefinedAcr.join(', ')}.`, recommended_action: 'Define each acronym on first use, e.g. "Convolutional Neural Network (CNN)".' });
   }
 
   if (fullText.trim().length > 100) {
@@ -299,9 +334,9 @@ function evaluateCompliance(structured, profileConfig) {
     const maxPages = profileConfig.maxPages || (profile === 'lncs' ? 15 : 6);
     ruleChecks.push({ rule: 'page_estimate', passed: estimatedPages >= minPages && estimatedPages <= maxPages, observedValue: `~${estimatedPages} pages`, expected: `${minPages}\u2013${maxPages} pages` });
     if (estimatedPages > maxPages) {
-      issues.push({ section: 'structure', severity: 'Review', problem: `Estimated length is ~${estimatedPages} pages \u2014 may exceed the ${profileConfig.name} page limit of ${maxPages} pages.`, recommended_action: 'Trim content. Verify actual page count in your formatted document.' });
+      addIssue({ section: 'structure', severity: 'Review', problem: `Estimated length is ~${estimatedPages} pages \u2014 may exceed the ${profileConfig.name} page limit of ${maxPages} pages.`, recommended_action: 'Trim content. Verify actual page count in your formatted document.' });
     } else if (estimatedPages < minPages) {
-      issues.push({ section: 'structure', severity: 'Review', problem: `Estimated length is ~${estimatedPages} pages \u2014 may be below the ${profileConfig.name} minimum of ${minPages} pages.`, recommended_action: 'Expand methodology, results, and discussion sections.' });
+      addIssue({ section: 'structure', severity: 'Review', problem: `Estimated length is ~${estimatedPages} pages \u2014 may be below the ${profileConfig.name} minimum of ${minPages} pages.`, recommended_action: 'Expand methodology, results, and discussion sections.' });
     }
   }
 
@@ -310,7 +345,7 @@ function evaluateCompliance(structured, profileConfig) {
     const newResultPattern = /we (found|discovered|show|demonstrate|prove|introduce|present a novel)/i;
     ruleChecks.push({ rule: 'conclusion_no_new_results', passed: !newResultPattern.test(conclusionText), observedValue: 'scanned', expected: 'no new claims' });
     if (newResultPattern.test(conclusionText)) {
-      issues.push({ section: 'conclusion', severity: 'Review', problem: 'Conclusion may be introducing new results or claims not previously discussed.', recommended_action: 'Conclusion should only summarize earlier findings. Move new claims to Results or Discussion.' });
+      addIssue({ section: 'conclusion', severity: 'Review', problem: 'Conclusion may be introducing new results or claims not previously discussed.', recommended_action: 'Conclusion should only summarize earlier findings. Move new claims to Results or Discussion.' });
     }
   }
 
