@@ -4,29 +4,6 @@ const { getSession, updateSession } = require('../store');
 const { getProfileConfig } = require('../profiles/index');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
 
-const KNOWN_SECTIONS = [
-  'abstract', 'introduction', 'related work', 'literature review', 'background',
-  'methodology', 'methods', 'approach', 'system design', 'system architecture',
-  'architecture', 'implementation', 'design', 'experiments', 'experimental setup',
-  'evaluation', 'results', 'results and discussion', 'discussion', 'analysis',
-  'performance', 'conclusion', 'conclusions', 'future work', 'future scope',
-  'acknowledgements', 'acknowledgments', 'references', 'bibliography',
-];
-
-function regexSectionScan(text) {
-  const found = new Set();
-  const lower = text.toLowerCase();
-  for (const sec of KNOWN_SECTIONS) {
-    const escaped = sec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = new RegExp(
-      `(?:^|\\n)\\s*(?:\\d+\\.?\\s*)?${escaped}\\s*(?:\\n|$)`,
-      'i'
-    );
-    if (pattern.test(lower)) found.add(sec === 'conclusions' ? 'conclusion' : sec);
-  }
-  return [...found];
-}
-
 function parseKeywords(value) {
   if (Array.isArray(value)) return value.map(k => k.trim()).filter(Boolean);
   const str = String(value)
@@ -36,45 +13,46 @@ function parseKeywords(value) {
   return str.split(/[,;\n]+/).map(k => k.trim()).filter(Boolean);
 }
 
-function rebuildStructured(structured, sectionKey, revisedText) {
-  let updated;
+function rebuildStructured(structured, targetSection, revisedText) {
+  const secLower = targetSection.toLowerCase();
 
-  if (sectionKey.toLowerCase() === 'keywords') {
-    updated = { ...structured, keywords: parseKeywords(revisedText) };
-  } else {
-    updated = { ...structured, [sectionKey]: revisedText };
+  // always write into structured.sections (the body map)
+  const updatedSections = { ...(structured.sections || {}) };
+
+  if (secLower === 'keywords') {
+    const parsed = parseKeywords(revisedText);
+    updatedSections['keywords'] = parsed.join(', ');
+    return {
+      ...structured,
+      keywords: parsed,
+      sections: updatedSections,
+    };
   }
 
-  const textParts = [
-    updated.title || '',
-    updated.abstract ? `Abstract\n${updated.abstract}` : '',
-    Array.isArray(updated.keywords) && updated.keywords.length
-      ? `Keywords\n${updated.keywords.join(', ')}`
-      : '',
-    ...(updated.sectionsDetected || []).map(s => `${s}\n`),
-  ];
-  const approxText = textParts.join('\n\n');
+  if (secLower === 'abstract') {
+    updatedSections['abstract'] = revisedText;
+    return {
+      ...structured,
+      abstract: revisedText,
+      sections: updatedSections,
+    };
+  }
 
-  const regexFound = regexSectionScan(approxText);
-  const implicitSections = [];
-  if (updated.title && updated.title.trim()) implicitSections.push('title');
-  if (updated.abstract && updated.abstract.trim()) implicitSections.push('abstract');
-  if (Array.isArray(updated.keywords) && updated.keywords.length > 0) implicitSections.push('keywords');
+  if (secLower === 'title') {
+    updatedSections['title'] = revisedText;
+    return {
+      ...structured,
+      title: revisedText,
+      sections: updatedSections,
+    };
+  }
 
-  const mergedDetected = [...new Set([...updated.sectionsDetected, ...regexFound, ...implicitSections])];
-
-  // sync referencesPresent with what regex found
-  const referencesPresent =
-    updated.referencesPresent ||
-    mergedDetected.some(s => s.toLowerCase() === 'references' || s.toLowerCase() === 'bibliography');
-
-  if (referencesPresent) mergedDetected.push('references');
-
-  const mergedMissing = (updated.sectionsMissing || []).filter(
-    s => !mergedDetected.map(d => d.toLowerCase()).includes(s.toLowerCase())
-  );
-
-  return { ...updated, sectionsDetected: [...new Set(mergedDetected)], sectionsMissing: mergedMissing, referencesPresent };
+  // all other sections (introduction, conclusion, methodology, etc.)
+  updatedSections[secLower] = revisedText;
+  return {
+    ...structured,
+    sections: updatedSections,
+  };
 }
 
 router.post('/', (req, res) => {
@@ -90,18 +68,25 @@ router.post('/', (req, res) => {
   }
 
   const structured = session.structuredManuscript;
+  const secLower = targetSection.toLowerCase();
 
-  const sectionKey =
-    Object.keys(structured).find((k) => k === targetSection) ||
-    Object.keys(structured).find((k) => k.toLowerCase() === targetSection.toLowerCase()) ||
-    Object.keys(structured).find((k) => k.toLowerCase().includes(targetSection.toLowerCase()));
+  // verify the section actually exists (top-level or in sections map)
+  const sectionMap = structured.sections || {};
+  const topLevelKeys = ['title', 'abstract', 'keywords'];
+  const existsInMap = Object.keys(sectionMap).some(k => k.toLowerCase() === secLower);
+  const existsTopLevel = topLevelKeys.includes(secLower);
+  const existsInDetected = (structured.sectionsDetected || []).some(
+    s => s.toLowerCase() === secLower
+  );
 
-  if (!sectionKey) {
-    return res.status(400).json({ error: `Section "${targetSection}" not found in manuscript.` });
+  if (!existsInMap && !existsTopLevel && !existsInDetected) {
+    return res.status(400).json({
+      error: `Section "${targetSection}" not found. Try re-analyzing the manuscript.`,
+    });
   }
 
   const updatedManuscript = revisedText
-    ? rebuildStructured(structured, sectionKey, revisedText)
+    ? rebuildStructured(structured, targetSection, revisedText)
     : structured;
 
   let profileConfig;

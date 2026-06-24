@@ -114,6 +114,7 @@ export default function App() {
   const [refineMode, setRefineMode] = useState('strict');
   const [paperTitle, setPaperTitle] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refiningSection, setRefiningSection] = useState(null); // tracks which section is actively loading
   const [pdfLoading, setPdfLoading] = useState(false);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Overview');
@@ -137,6 +138,7 @@ export default function App() {
     setSessionId(null);
     setSuggestion(null);
     setSelectedSection(null);
+    setRefiningSection(null);
     setActiveTab('Overview');
     setBonusTips(null);
     setRevisedSections({});
@@ -165,12 +167,11 @@ export default function App() {
     }
   };
 
-  // Single entry point for ALL refine actions — no intermediate screen
   const handleRefine = async (section) => {
-    if (!sessionId || loading) return;
+    if (!sessionId || loading || refiningSection) return;
     setSelectedSection(section);
+    setRefiningSection(section); // track exactly which section is refining
     setSuggestion(null);
-    setLoading(true);
     setError(null);
     try {
       const data = await refineSection(sessionId, section, refineMode);
@@ -179,13 +180,12 @@ export default function App() {
       setError(err.message);
       setSelectedSection(null);
     } finally {
-      setLoading(false);
+      setRefiningSection(null);
     }
   };
 
-  // Clicking a section row directly triggers Gemini refine
   const handleSectionRowClick = (sectionName) => {
-    if (!sessionId || loading) return;
+    if (!sessionId || loading || refiningSection) return;
     const sec = sectionName.toLowerCase();
     if (NON_REFINABLE.includes(sec)) return;
     handleRefine(sectionName);
@@ -255,6 +255,7 @@ export default function App() {
   const sectionsTotal = structured
     ? (structured.sectionsDetected?.length || 0) + (structured.sectionsMissing?.length || 0)
     : 0;
+  const isRefining = !!refiningSection;
 
   const issuesByTab = (tab) => {
     if (!report?.issues) return [];
@@ -330,7 +331,7 @@ export default function App() {
           </select>
 
           <button className="btn btn-primary" onClick={handleAnalyze} disabled={loading || !text.trim()}>
-            {loading && !selectedSection ? 'Analyzing…' : 'Analyze manuscript'}
+            {loading && !isRefining ? 'Analyzing…' : 'Analyze manuscript'}
           </button>
 
           {report && (
@@ -362,7 +363,7 @@ export default function App() {
             <div className="empty-state">Run analysis to see your compliance report.</div>
           )}
 
-          {loading && !selectedSection && (
+          {loading && !isRefining && (
             <div className="loading-state">
               <div className="spinner" />
               <p>Processing manuscript…</p>
@@ -456,7 +457,7 @@ export default function App() {
                           <span className="issue-title">{issue.problem}</span>
                         </div>
                         {issue.recommended_action && <p className="issue-action">{issue.recommended_action}</p>}
-                        {getActionButtons(issue, handleRefine, loading)}
+                        {getActionButtons(issue, handleRefine, isRefining)}
                       </div>
                     ))}
                   </div>
@@ -468,18 +469,18 @@ export default function App() {
                         {buildSectionRows().map(s => {
                           const isNonRefinable = NON_REFINABLE.includes(s.name.toLowerCase());
                           const isMissing = s.status === 'Missing';
-                          const isActive = selectedSection === s.name && loading;
-                          const clickable = sessionId && !isNonRefinable && !isMissing && !loading;
+                          const isThisRefining = refiningSection === s.name; // only THIS row shows spinner
+                          const clickable = sessionId && !isNonRefinable && !isMissing && !isRefining;
                           return (
                             <div
                               key={s.name}
-                              className={`section-row${clickable ? ' section-row--clickable' : ''}${isActive ? ' section-row--selected' : ''}`}
+                              className={`section-row${clickable ? ' section-row--clickable' : ''}${isThisRefining ? ' section-row--selected' : ''}`}
                               onClick={() => clickable && handleSectionRowClick(s.name)}
                               title={clickable ? `Click to refine ${s.name} with Gemini` : undefined}
                             >
                               <div className="section-row-name" style={{ textTransform: 'capitalize' }}>{s.name}</div>
                               <div className="section-row-note">
-                                {isActive
+                                {isThisRefining
                                   ? 'Sending to Gemini…'
                                   : s.note || (isMissing ? 'Not found in manuscript' : 'Detected')}
                               </div>
@@ -512,18 +513,18 @@ export default function App() {
             <h2>Safe revision preview</h2>
           </div>
 
-          {!suggestion && !loading && (
+          {!suggestion && !isRefining && (
             <div className="empty-state">Click any section or issue button to get a Gemini-powered replacement.</div>
           )}
 
-          {loading && selectedSection && (
+          {isRefining && (
             <div className="loading-state">
               <div className="spinner" />
-              <p>Gemini is rewriting <strong style={{textTransform:'capitalize'}}>{selectedSection}</strong>…</p>
+              <p>Gemini is rewriting <strong style={{textTransform:'capitalize'}}>{refiningSection}</strong>…</p>
             </div>
           )}
 
-          {suggestion && (
+          {suggestion && !isRefining && (
             <>
               <div className="revision-section-label">Section: {suggestion.target_section}</div>
 
