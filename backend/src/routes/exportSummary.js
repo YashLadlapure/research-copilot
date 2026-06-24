@@ -19,7 +19,13 @@ router.post('/', async (req, res) => {
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  const { sections, profile } = session;
+  // sections lives inside structuredManuscript, not on session root
+  const sections = session.structuredManuscript?.sections;
+  if (!sections || Object.keys(sections).length === 0) {
+    return res.status(400).json({ error: 'No manuscript sections found in session. Re-run analysis first.' });
+  }
+
+  const { profile } = session;
   const revised = revisedSections || {};
   const hasRevisions = Object.keys(revised).length > 0;
 
@@ -31,17 +37,7 @@ router.post('/', async (req, res) => {
 
     for (const [sectionName, revisedText] of entries) {
       const original = sections[sectionName] || '';
-      const prompt = `You are a research writing assistant.
-
-A researcher revised the "${sectionName}" section of their manuscript for ${profile.toUpperCase()} compliance.
-
-Original:
-${original.slice(0, 800)}
-
-Revised:
-${revisedText.slice(0, 800)}
-
-Write ONE sentence (max 30 words) explaining why this revision improves compliance. Be specific. No fluff.`;
+      const prompt = `You are a research writing assistant.\n\nA researcher revised the "${sectionName}" section of their manuscript for ${profile.toUpperCase()} compliance.\n\nOriginal:\n${original.slice(0, 800)}\n\nRevised:\n${revisedText.slice(0, 800)}\n\nWrite ONE sentence (max 30 words) explaining why this revision improves compliance. Be specific. No fluff.`;
 
       try {
         const explanation = await callGemini(prompt);
