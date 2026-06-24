@@ -11,11 +11,11 @@ export async function analyzeManuscript(text, profile, sessionId = null) {
   return data;
 }
 
-export async function refineSection(sessionId, targetSection, mode = 'strict') {
+export async function refineSection(sessionId, targetSection) {
   const res = await fetch(`${BASE}/api/refine-section`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, targetSection, mode }),
+    body: JSON.stringify({ sessionId, targetSection, mode: 'compliance' }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Refinement failed');
@@ -62,7 +62,6 @@ export async function fetchExportData(sessionId, revisedSections) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId, revisedSections }),
   });
-  // backend returns plain text
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || 'Export failed');
