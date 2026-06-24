@@ -19,8 +19,8 @@ export async function reanalyzeManuscript(sessionId) {
   return post('/api/reanalyze', { sessionId });
 }
 
-export async function refineSection(sessionId, section) {
-  return post('/api/refine-section', { sessionId, section });
+export async function refineSection(sessionId, targetSection) {
+  return post('/api/refine-section', { sessionId, targetSection });
 }
 
 export async function applySuggestion(sessionId, targetSection, revisedText) {
