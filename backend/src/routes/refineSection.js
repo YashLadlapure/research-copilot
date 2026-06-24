@@ -50,15 +50,18 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'No structured manuscript found. Run Analyze first.' });
   }
 
-  const sectionKey =
-    Object.keys(structured).find((k) => k === targetSection) ||
-    Object.keys(structured).find((k) => k.toLowerCase() === targetSection.toLowerCase()) ||
-    Object.keys(structured).find((k) => k.toLowerCase().includes(targetSection.toLowerCase()));
+  // sections live inside structured.sections, not at the top level
+  const sectionMap = structured.sections || structured;
 
-  const originalText = sectionKey ? structured[sectionKey] : null;
+  const sectionKey =
+    Object.keys(sectionMap).find((k) => k === targetSection) ||
+    Object.keys(sectionMap).find((k) => k.toLowerCase() === targetSection.toLowerCase()) ||
+    Object.keys(sectionMap).find((k) => k.toLowerCase().includes(targetSection.toLowerCase()));
+
+  const originalText = sectionKey ? sectionMap[sectionKey] : null;
   if (!originalText) {
     return res.status(400).json({
-      error: `Section "${targetSection}" not found. Available: ${Object.keys(structured).join(', ')}`,
+      error: `Section "${targetSection}" not found. Available: ${Object.keys(sectionMap).join(', ')}`,
     });
   }
 
