@@ -307,7 +307,17 @@ export default function App() {
     setError(null);
     try {
       const exportText = await fetchExportData(sessionId, revisedSections);
-      generateRevisionPdf(exportText, revisedSections, profile, report.overallScore, report.manualWarnings || []);
+      const manualIssues = (report.issues || []).filter(
+        i => i.manualOnly || NON_REFINABLE.has((i.section || '').toLowerCase())
+      );
+      generateRevisionPdf(
+        exportText,
+        revisedSections,
+        profile,
+        report.overallScore,
+        report.manualWarnings || [],
+        manualIssues
+      );
     } catch (err) {
       setError('Export failed: ' + err.message);
     } finally {
