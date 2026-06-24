@@ -164,10 +164,7 @@ export default function App() {
   const [suggestion, setSuggestion] = useState(null);
   const [error, setError] = useState(null);
 
-  const handleAnalyze = async () => {
-    if (!text.trim()) return;
-    setLoading(true);
-    setError(null);
+  const resetReportState = () => {
     setReport(null);
     setStructured(null);
     setSessionId(null);
@@ -178,6 +175,18 @@ export default function App() {
     setBonusTips(null);
     setRevisedSections({});
     setDismissedIssues([]);
+    setError(null);
+  };
+
+  const handleProfileChange = (e) => {
+    setProfile(e.target.value);
+    resetReportState();
+  };
+
+  const handleAnalyze = async () => {
+    if (!text.trim()) return;
+    setLoading(true);
+    resetReportState();
     try {
       const data = await analyzeManuscript(text, profile);
       setSessionId(data.sessionId);
@@ -230,8 +239,6 @@ export default function App() {
   const handleApply = async () => {
     if (!suggestion) return;
 
-    // Always read section name from the suggestion object itself — never from
-    // selectedSection state which can be stale due to React batching.
     const targetSection = suggestion.target_section || selectedSection;
 
     if (!sessionId) {
@@ -436,7 +443,7 @@ export default function App() {
           <textarea className="textarea" placeholder="Or paste your manuscript text here…" value={text} onChange={(e) => setText(e.target.value)} rows={8} />
 
           <label className="field-label">Target publication format</label>
-          <select className="select" value={profile} onChange={(e) => setProfile(e.target.value)}>
+          <select className="select" value={profile} onChange={handleProfileChange}>
             {PROFILES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
 
