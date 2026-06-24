@@ -62,7 +62,11 @@ function extractFromRawText(normalizedText, targetSection) {
 }
 
 router.post('/', async (req, res) => {
-  const { sessionId, targetSection, mode = 'strict' } = req.body;
+  // BUG FIX #4: removed stale `mode` param — geminiRefine.js ignores it
+  // (the _mode parameter in refineSectionText is already a no-op).
+  // Frontend was sending mode:'compliance' but default was 'strict' — now
+  // the param is simply not accepted or forwarded to avoid future confusion.
+  const { sessionId, targetSection } = req.body;
 
   if (!sessionId || !targetSection) {
     return res.status(400).json({ error: '"sessionId" and "targetSection" are required.' });
@@ -81,7 +85,6 @@ router.post('/', async (req, res) => {
   const sectionMap = structured.sections || {};
   const targetLower = targetSection.toLowerCase();
 
-  // exact match first, then case-insensitive exact, NO partial/includes fallback
   const sectionKey =
     Object.keys(sectionMap).find(k => k === targetSection) ||
     Object.keys(sectionMap).find(k => k.toLowerCase() === targetLower);
@@ -108,7 +111,7 @@ router.post('/', async (req, res) => {
   const constraints = buildConstraints(targetSection, session.complianceReport, profileConfig);
 
   try {
-    const result = await refineSectionText(originalText, session.profile, mode, constraints);
+    const result = await refineSectionText(originalText, session.profile, null, constraints);
     return res.json({
       suggestion: {
         target_section: targetSection,
@@ -117,7 +120,6 @@ router.post('/', async (req, res) => {
         change_summary: result.change_summary,
         rationale: result.rationale,
         safety_note: result.safety_note,
-        mode,
         confidence: result.confidence,
       },
     });

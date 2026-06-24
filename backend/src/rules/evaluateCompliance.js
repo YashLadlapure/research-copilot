@@ -159,7 +159,9 @@ function evaluateCompliance(structured, profileConfig) {
   const fullText = Object.values(sections).join('\n') + '\n' + (structured.abstract || '') + '\n' + (structured.title || '');
   const rawText = structured.rawText || fullText;
   const refText = sections['references'] || sections['bibliography'] || '';
-  const profile = profileConfig.id || 'lncs';
+
+  // BUG FIX #1: use profileConfig.key (not .id which doesn't exist)
+  const profile = profileConfig.key || 'lncs';
   const title = structured.title || '';
 
   function addIssue(issue) {
@@ -256,8 +258,9 @@ function evaluateCompliance(structured, profileConfig) {
     addIssue({ section: 'structure', severity: 'Review', problem: 'Heading depth exceeds the recommended maximum. LNCS and IEEE allow a maximum of 3 numbered heading levels.', recommended_action: 'Reduce heading depth to 3 levels or fewer. Use run-in headings for Level 3 and Level 4.' });
   }
 
+  // BUG FIX #5 (from audit): acknowledgements numbering check is LNCS-only
   const ackCheck = checkAcknowledgements(fullText);
-  if (ackCheck.present && ackCheck.numbered) {
+  if (profile === 'lncs' && ackCheck.present && ackCheck.numbered) {
     addIssue({ section: 'acknowledgements', severity: 'Review', problem: 'Acknowledgements section appears to be numbered. LNCS requires the Acknowledgements section to be unnumbered.', recommended_action: 'Remove the section number from the Acknowledgements heading.' });
     ruleChecks.push({ rule: 'acknowledgements_unnumbered', passed: false, observedValue: 'numbered', expected: 'unnumbered' });
   }
@@ -301,8 +304,9 @@ function evaluateCompliance(structured, profileConfig) {
 
   if (fullText.trim().length > 100) {
     const estimatedPages = estimatePages(fullText, profile);
-    const minPages = profileConfig.minPages || (profile === 'lncs' ? 10 : 4);
-    const maxPages = profileConfig.maxPages || (profile === 'lncs' ? 15 : 6);
+    // BUG FIX #2: use profileConfig.pageRange.min/max (not nonexistent .minPages/.maxPages)
+    const minPages = (profileConfig.pageRange && profileConfig.pageRange.min) || (profile === 'lncs' ? 10 : 4);
+    const maxPages = (profileConfig.pageRange && profileConfig.pageRange.max) || (profile === 'lncs' ? 15 : 6);
     ruleChecks.push({ rule: 'page_estimate', passed: estimatedPages >= minPages && estimatedPages <= maxPages, observedValue: `~${estimatedPages} pages`, expected: `${minPages}\u2013${maxPages} pages` });
     if (estimatedPages > maxPages) {
       addIssue({ section: 'structure', severity: 'Review', problem: `Estimated length is ~${estimatedPages} pages \u2014 may exceed the ${profileConfig.name} page limit of ${maxPages} pages.`, recommended_action: 'Trim content. Verify actual page count in your formatted document.' });
@@ -324,6 +328,7 @@ function evaluateCompliance(structured, profileConfig) {
   const reviewCount = issues.filter(i => i.severity === 'Review').length;
   const overallScore = Math.max(0, 100 - criticalCount * 20 - reviewCount * 5);
 
+  // BUG FIX #1 continued: manualWarnings now uses the correct profile key
   const manualWarnings = MANUAL_WARNINGS[profile] || [];
 
   return {

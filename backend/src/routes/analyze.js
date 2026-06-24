@@ -75,6 +75,37 @@ function mapToStructured(geminiJson) {
   };
 }
 
+async function buildStructuredManuscript(normalizedText, profile) {
+  const geminiJson = await extractSections(normalizedText, profile);
+  const base = mapToStructured(geminiJson);
+
+  const regexFound = regexSectionScan(normalizedText);
+  const mergedDetected = [...new Set([...base.sectionsDetected, ...regexFound])];
+  const mergedMissing = base.sectionsMissing.filter(
+    s => !mergedDetected.map(d => d.toLowerCase()).includes(s.toLowerCase())
+  );
+
+  const referencesPresent =
+    base.referencesPresent ||
+    mergedDetected.some(s => s.toLowerCase() === 'references' || s.toLowerCase() === 'bibliography');
+
+  const sectionBodies = extractSectionBodies(normalizedText, mergedDetected);
+  if (base.title) sectionBodies['title'] = sectionBodies['title'] || base.title;
+  if (base.abstract) sectionBodies['abstract'] = sectionBodies['abstract'] || base.abstract;
+  if (base.keywords && base.keywords.length) {
+    sectionBodies['keywords'] = sectionBodies['keywords'] || base.keywords.join(', ');
+  }
+
+  return {
+    ...base,
+    sectionsDetected: mergedDetected,
+    sectionsMissing: mergedMissing,
+    referencesPresent,
+    sections: sectionBodies,
+    rawText: normalizedText,
+  };
+}
+
 router.post('/', async (req, res) => {
   const { text, profile, sessionId: existingSessionId } = req.body;
 
@@ -89,52 +120,34 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
+  const normalizedText = normalizeText(text);
+
+  // BUG FIX #3: always re-run Gemini extraction on re-analyze so
+  // applied revisions are reflected in the updated structured manuscript.
+  // The old path re-used the stale existing.structuredManuscript without
+  // re-processing the text, so the compliance score ran on outdated data.
   if (existingSessionId) {
     const existing = getSession(existingSessionId);
-    if (existing && existing.structuredManuscript) {
-      const newReport = evaluateCompliance(existing.structuredManuscript, profileConfig);
-      updateSession(existingSessionId, { complianceReport: newReport, profile });
+    if (existing) {
+      let structuredManuscript;
+      try {
+        structuredManuscript = await buildStructuredManuscript(normalizedText, profile);
+      } catch (err) {
+        return res.status(502).json({ error: err.message });
+      }
+      const newReport = evaluateCompliance(structuredManuscript, profileConfig);
+      updateSession(existingSessionId, { structuredManuscript, complianceReport: newReport, profile, normalizedText });
       return res.json({
         sessionId: existingSessionId,
-        structuredManuscript: existing.structuredManuscript,
+        structuredManuscript,
         complianceReport: newReport,
       });
     }
   }
 
-  const normalizedText = normalizeText(text);
-
   let structuredManuscript;
   try {
-    const geminiJson = await extractSections(normalizedText, profile);
-    const base = mapToStructured(geminiJson);
-
-    const regexFound = regexSectionScan(normalizedText);
-    const mergedDetected = [...new Set([...base.sectionsDetected, ...regexFound])];
-    const mergedMissing = base.sectionsMissing.filter(
-      s => !mergedDetected.map(d => d.toLowerCase()).includes(s.toLowerCase())
-    );
-
-    const referencesPresent =
-      base.referencesPresent ||
-      mergedDetected.some(s => s.toLowerCase() === 'references' || s.toLowerCase() === 'bibliography');
-
-    const sectionBodies = extractSectionBodies(normalizedText, mergedDetected);
-    if (base.title) sectionBodies['title'] = sectionBodies['title'] || base.title;
-    if (base.abstract) sectionBodies['abstract'] = sectionBodies['abstract'] || base.abstract;
-    if (base.keywords && base.keywords.length) {
-      sectionBodies['keywords'] = sectionBodies['keywords'] || base.keywords.join(', ');
-    }
-
-    structuredManuscript = {
-      ...base,
-      sectionsDetected: mergedDetected,
-      sectionsMissing: mergedMissing,
-      referencesPresent,
-      sections: sectionBodies,
-      // store full normalized text so compliance rules can scan preamble (emails, affiliations)
-      rawText: normalizedText,
-    };
+    structuredManuscript = await buildStructuredManuscript(normalizedText, profile);
   } catch (err) {
     return res.status(502).json({ error: err.message });
   }
