@@ -254,6 +254,15 @@ body {
 
 .btn-outline:hover:not(:disabled) { background: #f9fafb; }
 
+.btn-export {
+  background: #0ea5e9;
+  color: #fff;
+  padding: 9px 16px;
+  margin-top: 10px;
+}
+
+.btn-export:hover:not(:disabled) { background: #0284c7; }
+
 /* ── Trust note ── */
 .trust-note {
   font-size: 0.72rem;
@@ -680,4 +689,43 @@ body {
   font-size: 0.76rem;
   color: #92400e;
   line-height: 1.6;
+}
+
+/* ── Tips card ── */
+.tips-card {
+  padding: 16px;
+  background: #1a1a2e;
+  border-radius: 8px;
+  margin-top: 12px;
+  border: 1px solid #2d2d4e;
+}
+
+.tips-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #a78bfa;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tips-list {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tips-item {
+  margin-bottom: 4px;
+  color: #d1d5db;
+  line-height: 1.55;
+  font-size: 0.82rem;
+}
+
+.tips-loading,
+.tips-empty {
+  color: #6b7280;
+  font-size: 0.82rem;
+  font-style: italic;
 }
