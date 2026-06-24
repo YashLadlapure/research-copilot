@@ -32,9 +32,6 @@ function checkReferenceListStyle(refText) {
   return { style: numbered ? 'numbered' : authorYear ? 'author-year' : 'unknown' };
 }
 
-// Strip references/bibliography block before scanning acronyms.
-// Publisher names (CRC, MIT, ACM, IEEE) and author surnames in ALL-CAPS
-// inside the reference list are not undefined acronyms.
 function stripReferencesBlock(text) {
   const refHeading = /\n\s*(?:references|bibliography)\s*\n/i;
   const idx = text.search(refHeading);
@@ -45,16 +42,11 @@ function findUndefinedAcronyms(fullText) {
   const bodyText = stripReferencesBlock(fullText);
   const acronyms = [...new Set((bodyText.match(/\b[A-Z]{2,6}\b/g) || []))];
   const common = new Set([
-    // general computing / AI
     'AI', 'ML', 'NLP', 'API', 'PDF', 'URL', 'IEEE', 'LNCS', 'IoT',
     'ID', 'UI', 'UX', 'DB', 'OS', 'CPU', 'GPU', 'RAM', 'RDA', 'GPT',
-    // publication / academic
     'DOI', 'ISBN', 'ISSN', 'ACM', 'CRC', 'MIT', 'ETH', 'NSF', 'NIH',
-    // common abbreviations that appear without parens
     'RDA', 'NRC', 'WHO', 'UN', 'USA', 'UK', 'EU', 'IN', 'IT',
-    // domain-specific (Ayurveda paper context)
     'IFCT', 'DHARA', 'AYUSH',
-    // single-word all-caps that are proper nouns or well-known
     'SQL', 'CSV', 'JSON', 'XML', 'HTML', 'CSS', 'HTTP', 'REST',
     'GAN', 'CNN', 'RNN', 'LSTM', 'BERT', 'LLM', 'SVM', 'KNN',
   ]);
@@ -76,32 +68,6 @@ function titleEndsWithPeriod(title) {
   return /\.\s*$/.test((title || '').trim());
 }
 
-function checkTitleCase(title) {
-  if (!title) return { passed: true };
-  const skipWords = new Set([
-    'a', 'an', 'the',
-    'and', 'but', 'for', 'or', 'nor', 'so', 'yet',
-    'in', 'on', 'at', 'to', 'of', 'by', 'up', 'as',
-    'with', 'from', 'into', 'than', 'via', 'per',
-  ]);
-  const words = title.trim().split(/\s+/);
-  const violations = [];
-  words.forEach((word, i) => {
-    const clean = word.replace(/^[^a-zA-Z]+/, '').replace(/[^a-zA-Z]+$/, '');
-    if (!clean) return;
-    const isFirst = i === 0;
-    const lower = clean.toLowerCase();
-    if (isFirst) {
-      return;
-    } else if (skipWords.has(lower)) {
-      if (clean[0] !== clean[0].toLowerCase()) violations.push(word);
-    } else {
-      if (clean[0] !== clean[0].toUpperCase()) violations.push(word);
-    }
-  });
-  return { passed: violations.length === 0, violations };
-}
-
 function checkAffiliationCompleteness(fullText) {
   const hasInstitution = /university|institute|college|lab|department|school/i.test(fullText);
   const hasCountry = /india|usa|germany|china|uk|france|canada|australia|japan|italy|spain/i.test(fullText);
@@ -120,8 +86,6 @@ function checkAcknowledgements(fullText) {
   return { present, numbered };
 }
 
-// Scan rawText (full normalized document including preamble) for emails.
-// Falls back to fullText (section bodies only) if rawText is not provided.
 function checkEmailPresence(rawText) {
   const emails = rawText.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
   return { count: emails.length, hasEmail: emails.length > 0 };
@@ -193,7 +157,6 @@ function evaluateCompliance(structured, profileConfig) {
 
   const sections = structured.sections || {};
   const fullText = Object.values(sections).join('\n') + '\n' + (structured.abstract || '') + '\n' + (structured.title || '');
-  // rawText includes the full document preamble (author block, affiliations, emails)
   const rawText = structured.rawText || fullText;
   const refText = sections['references'] || sections['bibliography'] || '';
   const profile = profileConfig.id || 'lncs';
@@ -275,19 +238,12 @@ function evaluateCompliance(structured, profileConfig) {
     addIssue({ section: 'title', severity: 'Critical', problem: 'The paper title must not end with a period.', recommended_action: 'Remove the trailing period from the paper title.' });
   }
 
-  const titleCaseCheck = checkTitleCase(title);
-  ruleChecks.push({ rule: 'title_case', passed: titleCaseCheck.passed, observedValue: titleCaseCheck.violations?.join(', ') || 'ok', expected: 'principal words capitalized' });
-  if (title && !titleCaseCheck.passed && titleCaseCheck.violations?.length > 0) {
-    addIssue({ section: 'title', severity: 'Review', problem: `Title case issue: "${titleCaseCheck.violations.join(', ')}" may not follow LNCS capitalization rules (capitalize nouns, verbs, adjectives; lowercase articles and short prepositions).`, recommended_action: 'Review title capitalization against the LNCS heading style guide.' });
-  }
-
   const affiliation = checkAffiliationCompleteness(rawText);
   ruleChecks.push({ rule: 'affiliation_completeness', passed: affiliation.passed, observedValue: JSON.stringify(affiliation), expected: 'institution + country' });
   if (!affiliation.passed) {
     addIssue({ section: 'metadata', severity: 'Review', problem: `Author affiliation appears incomplete. ${profileConfig.name} requires institution name, town/city, and country for every author.`, recommended_action: 'Add full affiliation including Department, University, City, and Country for each author.' });
   }
 
-  // Use rawText so emails in the author preamble (before section headings) are found
   const emailCheck = checkEmailPresence(rawText);
   ruleChecks.push({ rule: 'email_present', passed: emailCheck.hasEmail, observedValue: `${emailCheck.count} email(s)`, expected: '\u22651 email' });
   if (!emailCheck.hasEmail) {
@@ -337,7 +293,6 @@ function evaluateCompliance(structured, profileConfig) {
     });
   }
 
-  // Acronym check runs on body text only (refs stripped) to avoid publisher names / author surnames
   const undefinedAcr = findUndefinedAcronyms(fullText);
   ruleChecks.push({ rule: 'acronym_definitions', passed: undefinedAcr.length === 0, observedValue: undefinedAcr.join(', ') || 'none', expected: 'all defined on first use' });
   if (undefinedAcr.length > 0) {

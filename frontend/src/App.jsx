@@ -20,10 +20,8 @@ const SEVERITY_COLOR = {
   Good: '#22c55e',
 };
 
-// Sections that must never be sent to Gemini for auto-rewrite.
 const NON_REFINABLE = new Set([
   'references', 'bibliography',
-  // synthetic tags resolved on backend
   'language', 'metadata', 'structure', 'figures', 'tables',
 ]);
 
@@ -62,6 +60,12 @@ function sortIssues(issues) {
     if (!aRef && bRef) return -1;
     return 0;
   });
+}
+
+function recalcScore(issues) {
+  const criticalCount = issues.filter(i => i.severity === 'Critical').length;
+  const reviewCount = issues.filter(i => i.severity === 'Review').length;
+  return Math.max(0, 100 - criticalCount * 20 - reviewCount * 5);
 }
 
 function ApaGuide() {
@@ -222,7 +226,6 @@ export default function App() {
         const freshIssues = (data.complianceReport.issues || []).filter(
           issue => !dismissedIssues.some(d => d.section === issue.section && d.problem === issue.problem)
         );
-        // use backend score, not a local recalculation
         const updatedReport = {
           ...data.complianceReport,
           issues: freshIssues,
@@ -246,13 +249,7 @@ export default function App() {
       const remaining = prev.issues.filter(
         i => !(i.section === issue.section && i.problem === issue.problem)
       );
-      const criticalCount = remaining.filter(i => i.severity === 'Critical').length;
-      const reviewCount = remaining.filter(i => i.severity === 'Review').length;
-      return {
-        ...prev,
-        issues: remaining,
-        overallScore: Math.max(0, 100 - criticalCount * 20 - reviewCount * 5),
-      };
+      return { ...prev, issues: remaining, overallScore: recalcScore(remaining) };
     });
   };
 
@@ -276,7 +273,23 @@ export default function App() {
     }
   };
 
+  // Reject: dismiss the issue that triggered this refinement and recalculate score
   const handleReject = () => {
+    if (selectedSection && report) {
+      setReport(prev => {
+        if (!prev) return prev;
+        const remaining = prev.issues.filter(
+          i => (i.section || '').toLowerCase() !== (selectedSection || '').toLowerCase()
+        );
+        return { ...prev, issues: remaining, overallScore: recalcScore(remaining) };
+      });
+      setDismissedIssues(prev => [
+        ...prev,
+        ...(report.issues || []).filter(
+          i => (i.section || '').toLowerCase() === (selectedSection || '').toLowerCase()
+        ),
+      ]);
+    }
     setSuggestion(null);
     setSelectedSection(null);
   };
