@@ -41,8 +41,13 @@ function scoreSubtitle(score, issues) {
 
 function getActionButtons(issue, onRefine, loading) {
   const sec = (issue.section || '').toLowerCase();
-  const canRefine = !NON_REFINABLE.includes(sec);
-  if (!canRefine) return null;
+  if (NON_REFINABLE.includes(sec)) {
+    return (
+      <div className="issue-manual-note">
+        ⚠️ Must be fixed manually in your document — references cannot be auto-edited to avoid citation errors.
+      </div>
+    );
+  }
   const label = sec === 'abstract' ? 'Improve abstract' : sec === 'keywords' ? 'Suggest keywords' : 'Refine section';
   return (
     <div className="issue-actions">
@@ -232,6 +237,8 @@ export default function App() {
     ];
   };
 
+  const profileLabel = PROFILES.find(p => p.value === profile)?.label || 'the target format';
+
   return (
     <div className="app-root">
       <header className="topbar">
@@ -340,7 +347,7 @@ export default function App() {
                 </div>
                 <div className="score-meta">
                   <div className="meta-item">
-                    <div className="meta-val">{PROFILES.find(p => p.value === profile)?.label}</div>
+                    <div className="meta-val">{profileLabel}</div>
                     <div className="meta-key">Template</div>
                   </div>
                   <div className="meta-item">
@@ -362,6 +369,15 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Manual warnings hint — always shown after analysis */}
+              <div className="manual-warnings-hint">
+                <span className="manual-warnings-hint__icon">&#x1F4CB;</span>
+                <span className="manual-warnings-hint__text">
+                  This score covers text-level compliance only. Layout rules (font sizes, margins, indentation, equation alignment) require manual verification in your {profileLabel} template.
+                  <strong> Export the revision report</strong> to see the full checklist.
+                </span>
+              </div>
+
               <div className="tab-bar">
                 {DASHBOARD_TABS.map(tab => (
                   <button key={tab} className={`tab-btn${activeTab === tab ? ' tab-btn--active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
@@ -370,7 +386,7 @@ export default function App() {
 
               {activeTab === 'Tips' && (
                 <div className="tips-card">
-                  <p className="tips-title">&#x2728; Bonus tips for {PROFILES.find(p => p.value === profile)?.label}</p>
+                  <p className="tips-title">&#x2728; Bonus tips for {profileLabel}</p>
                   {tipsLoading && <div className="tips-loading">Asking Gemini for publication tips…</div>}
                   {!tipsLoading && bonusTips?.tips && (
                     <ol className="tips-list">
