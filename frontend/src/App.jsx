@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import './App.css';
-import { analyzeManuscript, refineSection, applySuggestion, extractPdf, fetchBonusTips, fetchExportData } from './api';
+import { analyzeManuscript, reanalyzeManuscript, refineSection, applySuggestion, extractPdf, fetchBonusTips, fetchExportData } from './api';
 import { generateRevisionPdf } from './exportPdf';
 
 const PROFILES = [
@@ -259,8 +259,10 @@ export default function App() {
     });
   };
 
+  // Calls /api/reanalyze which builds text from the session's current revised
+  // sections — not from the original textarea — so applied changes are reflected.
   const handleReanalyze = async () => {
-    if (!sessionId || !text.trim()) return;
+    if (!sessionId) return;
     setLoading(true);
     setError(null);
     setSuggestion(null);
@@ -269,11 +271,10 @@ export default function App() {
     setDismissedIssues([]);
     setBonusTips(null);
     try {
-      const data = await analyzeManuscript(text, profile, sessionId);
-      setSessionId(data.sessionId);
+      const data = await reanalyzeManuscript(sessionId);
       setStructured(data.structuredManuscript);
       setReport(data.complianceReport);
-      loadBonusTips(data.sessionId);
+      loadBonusTips(sessionId);
     } catch (err) {
       setError(err.message);
     } finally {
