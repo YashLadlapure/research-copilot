@@ -11,11 +11,12 @@ export async function analyzeManuscript(text, profile, sessionId = null) {
   return data;
 }
 
+// FIX #4 (cleanup): removed stale mode:'compliance' — backend no longer accepts it
 export async function refineSection(sessionId, targetSection) {
   const res = await fetch(`${BASE}/api/refine-section`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, targetSection, mode: 'compliance' }),
+    body: JSON.stringify({ sessionId, targetSection }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Refinement failed');

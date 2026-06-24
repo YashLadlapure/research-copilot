@@ -2,8 +2,13 @@ const express = require('express');
 const { getSession } = require('../store');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+// FIX #7: validate GEMINI_API_KEY at module load so missing key surfaces immediately
+if (!process.env.GEMINI_API_KEY) {
+  console.error('[bonusTips] WARNING: GEMINI_API_KEY is not set. Requests will fail.');
+}
+
 const router = express.Router();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 async function callGemini(prompt) {
@@ -20,6 +25,10 @@ const PROFILE_LABELS = {
 router.post('/', async (req, res) => {
   const { sessionId, profile } = req.body;
   if (!sessionId || !profile) return res.status(400).json({ error: 'sessionId and profile required' });
+
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(503).json({ error: 'Gemini API key not configured on this server.' });
+  }
 
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Session not found' });

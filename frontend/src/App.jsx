@@ -19,8 +19,9 @@ const NON_REFINABLE = new Set([
   'language', 'metadata', 'structure', 'figures', 'tables',
 ]);
 
+// FIX #5: removed dead SECTION_ORDER constant that was never used
+
 const DASHBOARD_TABS = ['Overview', 'Structure', 'Language', 'Tips', 'AI Disclosure'];
-const SECTION_ORDER = ['title', 'abstract', 'keywords', 'introduction', 'methodology', 'results', 'conclusion', 'references'];
 
 const APA_STEPS = [
   { label: 'Journal article', example: 'Author, A. A., & Author, B. B. (Year). Title of article. Journal Name, volume(issue), page–page. https://doi.org/xxxxx' },
@@ -254,11 +255,14 @@ export default function App() {
     setSelectedSection(null);
     setRevisedSections({});
     setDismissedIssues([]);
+    // FIX #9: reset stale bonus tips when re-analyzing
+    setBonusTips(null);
     try {
       const data = await analyzeManuscript(text, profile, sessionId);
       setSessionId(data.sessionId);
       setStructured(data.structuredManuscript);
       setReport(data.complianceReport);
+      loadBonusTips(data.sessionId);
     } catch (err) {
       setError(err.message);
     } finally {

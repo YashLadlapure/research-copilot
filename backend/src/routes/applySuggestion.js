@@ -4,6 +4,9 @@ const { getSession, updateSession } = require('../store');
 const { getProfileConfig } = require('../profiles/index');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
 
+// FIX #10: keywords are always stored as both array (structured.keywords)
+// AND a clean comma-joined string (sections['keywords']) so compliance engine
+// and diff panel both read consistent data.
 function parseKeywords(value) {
   if (Array.isArray(value)) return value.map(k => k.trim()).filter(Boolean);
   const str = String(value)
@@ -19,6 +22,8 @@ function rebuildStructured(structured, targetSection, revisedText) {
 
   if (secLower === 'keywords') {
     const parsed = parseKeywords(revisedText);
+    // keep sections['keywords'] as the same comma-joined string that the
+    // compliance engine and diff panel will display — not a raw array
     updatedSections['keywords'] = parsed.join(', ');
     return { ...structured, keywords: parsed, sections: updatedSections };
   }
@@ -70,6 +75,13 @@ router.post('/', (req, res) => {
     });
   }
 
+  // FIX #14 (companion): snapshot the original sections the first time a section
+  // is revised so exportSummary can always show the true pre-revision text.
+  const originalSections = session.originalSections || { ...sectionMap };
+  if (!originalSections[secLower]) {
+    originalSections[secLower] = sectionMap[secLower] || '';
+  }
+
   const updatedManuscript = rebuildStructured(structured, targetSection, revisedText);
 
   let profileConfig;
@@ -86,6 +98,7 @@ router.post('/', (req, res) => {
   updateSession(sessionId, {
     structuredManuscript: updatedManuscript,
     complianceReport: newReport,
+    originalSections,
   });
 
   return res.json({
