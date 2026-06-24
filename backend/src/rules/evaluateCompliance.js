@@ -160,7 +160,6 @@ function evaluateCompliance(structured, profileConfig) {
   const rawText = structured.rawText || fullText;
   const refText = sections['references'] || sections['bibliography'] || '';
 
-  // BUG FIX #1: use profileConfig.key (not .id which doesn't exist)
   const profile = profileConfig.key || 'lncs';
   const title = structured.title || '';
 
@@ -169,6 +168,12 @@ function evaluateCompliance(structured, profileConfig) {
       ...issue,
       section: resolveSection(issue.section, structured.sectionsDetected),
     });
+  }
+
+  // manualOnly issues bypass section remapping — section stays as-is and
+  // the frontend renders a manual note instead of a Refine button.
+  function addManualIssue(issue) {
+    issues.push({ ...issue, manualOnly: true });
   }
 
   for (const required of profileConfig.requiredSections) {
@@ -258,7 +263,6 @@ function evaluateCompliance(structured, profileConfig) {
     addIssue({ section: 'structure', severity: 'Review', problem: 'Heading depth exceeds the recommended maximum. LNCS and IEEE allow a maximum of 3 numbered heading levels.', recommended_action: 'Reduce heading depth to 3 levels or fewer. Use run-in headings for Level 3 and Level 4.' });
   }
 
-  // BUG FIX #5 (from audit): acknowledgements numbering check is LNCS-only
   const ackCheck = checkAcknowledgements(fullText);
   if (profile === 'lncs' && ackCheck.present && ackCheck.numbered) {
     addIssue({ section: 'acknowledgements', severity: 'Review', problem: 'Acknowledgements section appears to be numbered. LNCS requires the Acknowledgements section to be unnumbered.', recommended_action: 'Remove the section number from the Acknowledgements heading.' });
@@ -304,14 +308,24 @@ function evaluateCompliance(structured, profileConfig) {
 
   if (fullText.trim().length > 100) {
     const estimatedPages = estimatePages(fullText, profile);
-    // BUG FIX #2: use profileConfig.pageRange.min/max (not nonexistent .minPages/.maxPages)
     const minPages = (profileConfig.pageRange && profileConfig.pageRange.min) || (profile === 'lncs' ? 10 : 4);
     const maxPages = (profileConfig.pageRange && profileConfig.pageRange.max) || (profile === 'lncs' ? 15 : 6);
     ruleChecks.push({ rule: 'page_estimate', passed: estimatedPages >= minPages && estimatedPages <= maxPages, observedValue: `~${estimatedPages} pages`, expected: `${minPages}\u2013${maxPages} pages` });
     if (estimatedPages > maxPages) {
-      addIssue({ section: 'structure', severity: 'Review', problem: `Estimated length is ~${estimatedPages} pages \u2014 may exceed the ${profileConfig.name} page limit of ${maxPages} pages.`, recommended_action: 'Trim content. Verify actual page count in your formatted document.' });
+      // manualOnly: page count cannot be fixed by refining a single section
+      addManualIssue({
+        section: 'structure',
+        severity: 'Review',
+        problem: `Estimated length is ~${estimatedPages} pages \u2014 may exceed the ${profileConfig.name} page limit of ${maxPages} pages.`,
+        recommended_action: 'Trim content manually: shorten Related Work, merge Results and Discussion, or remove redundant background. Verify actual page count in your formatted template.',
+      });
     } else if (estimatedPages < minPages) {
-      addIssue({ section: 'structure', severity: 'Review', problem: `Estimated length is ~${estimatedPages} pages \u2014 may be below the ${profileConfig.name} minimum of ${minPages} pages.`, recommended_action: 'Expand methodology, results, and discussion sections.' });
+      addManualIssue({
+        section: 'structure',
+        severity: 'Review',
+        problem: `Estimated length is ~${estimatedPages} pages \u2014 may be below the ${profileConfig.name} minimum of ${minPages} pages.`,
+        recommended_action: 'Expand methodology, results, and discussion sections with more detail.',
+      });
     }
   }
 
@@ -328,7 +342,6 @@ function evaluateCompliance(structured, profileConfig) {
   const reviewCount = issues.filter(i => i.severity === 'Review').length;
   const overallScore = Math.max(0, 100 - criticalCount * 20 - reviewCount * 5);
 
-  // BUG FIX #1 continued: manualWarnings now uses the correct profile key
   const manualWarnings = MANUAL_WARNINGS[profile] || [];
 
   return {
