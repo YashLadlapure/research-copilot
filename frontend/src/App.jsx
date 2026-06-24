@@ -24,6 +24,14 @@ const NON_REFINABLE = ['references', 'bibliography'];
 const DASHBOARD_TABS = ['Overview', 'Structure', 'Language', 'Tips', 'AI Disclosure'];
 const SECTION_ORDER = ['title', 'abstract', 'keywords', 'introduction', 'methodology', 'results', 'conclusion', 'references'];
 
+const APA_STEPS = [
+  { label: 'Journal article', example: 'Author, A. A., & Author, B. B. (Year). Title of article. Journal Name, volume(issue), page–page. https://doi.org/xxxxx' },
+  { label: 'Book', example: 'Author, A. A. (Year). Title of work: Capital letter also for subtitle. Publisher.' },
+  { label: 'Book chapter', example: 'Author, A. A. (Year). Title of chapter. In E. Editor (Ed.), Title of book (pp. xx–xx). Publisher.' },
+  { label: 'Conference paper', example: 'Author, A. A. (Year, Month). Title of paper. In B. Editor (Ed.), Proceedings title (pp. xx–xx). Publisher.' },
+  { label: 'Website / online source', example: 'Author, A. A. (Year, Month Day). Title of page. Site Name. URL' },
+];
+
 function scoreColor(score) {
   if (score >= 75) return '#22c55e';
   if (score >= 50) return '#f59e0b';
@@ -45,17 +53,58 @@ function recalcScore(issues) {
   return Math.max(0, 100 - criticalCount * 20 - reviewCount * 5);
 }
 
+function sortIssues(issues) {
+  const refSections = new Set(['references', 'bibliography']);
+  return [...issues].sort((a, b) => {
+    const aRef = refSections.has((a.section || '').toLowerCase());
+    const bRef = refSections.has((b.section || '').toLowerCase());
+    if (aRef && !bRef) return 1;
+    if (!aRef && bRef) return -1;
+    return 0;
+  });
+}
+
+function ApaGuide() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="apa-guide">
+      <button className="apa-guide__toggle" onClick={() => setOpen(o => !o)}>
+        <span>📖 APA 7th edition — how to format references</span>
+        <span className="apa-guide__chevron">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <ol className="apa-guide__list">
+          <li className="apa-guide__rule"><strong>Author format:</strong> Last name, Initials. List all authors up to 20; for 21+, list first 19, add …, then last author.</li>
+          <li className="apa-guide__rule"><strong>Year:</strong> In parentheses immediately after authors — (2023).</li>
+          <li className="apa-guide__rule"><strong>Title:</strong> Sentence case only — capitalise the first word and proper nouns. No quotes, no bold.</li>
+          <li className="apa-guide__rule"><strong>Journal name &amp; volume:</strong> Italicise the journal name and volume number — <em>Journal Name, 12</em>(3).</li>
+          <li className="apa-guide__rule"><strong>DOI / URL:</strong> Always include as a hyperlink. Format: https://doi.org/xxxxx — no full stop after the URL.</li>
+          <li className="apa-guide__rule"><strong>Hanging indent:</strong> First line flush left; subsequent lines indented 0.5 in (1.27 cm).</li>
+          <li className="apa-guide__rule"><strong>Order:</strong> Alphabetical by first author's last name. Multiple works by the same author: oldest first.</li>
+          {APA_STEPS.map((s, i) => (
+            <li key={i} className="apa-guide__example">
+              <span className="apa-guide__example-label">{s.label}</span>
+              <code className="apa-guide__example-code">{s.example}</code>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 function getActionButtons(issue, onRefine, loading, onDismiss) {
   const sec = (issue.section || '').toLowerCase();
   if (NON_REFINABLE.includes(sec)) {
     return (
-      <div className="issue-actions">
+      <div className="issue-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
         <div className="issue-manual-note">
           ⚠️ Must be fixed manually — references cannot be auto-edited to avoid citation errors.
         </div>
+        <ApaGuide />
         <button
           className="action-btn action-btn--ghost"
-          style={{ marginTop: '6px', fontSize: '0.75rem' }}
+          style={{ marginTop: '8px', fontSize: '0.75rem' }}
           onClick={() => onDismiss(issue)}
         >
           ✓ Mark as fixed manually
@@ -162,7 +211,6 @@ export default function App() {
     try {
       const data = await applySuggestion(sessionId, selectedSection, suggestion.revised_text);
       if (data.complianceReport) {
-        // filter out any dismissed issues from the fresh report before setting
         const freshIssues = (data.complianceReport.issues || []).filter(
           issue => !dismissedIssues.some(d => d.section === issue.section && d.problem === issue.problem)
         );
@@ -263,13 +311,13 @@ export default function App() {
   const issuesByTab = (tab) => {
     if (!report?.issues) return [];
     const base = visibleIssues(report.issues);
-    if (tab === 'Overview') return base;
-    if (tab === 'Structure') return base.filter(i =>
+    if (tab === 'Overview') return sortIssues(base);
+    if (tab === 'Structure') return sortIssues(base.filter(i =>
       ['abstract', 'introduction', 'conclusion', 'methodology', 'results'].includes((i.section || '').toLowerCase())
-    );
-    if (tab === 'Language') return base.filter(i =>
+    ));
+    if (tab === 'Language') return sortIssues(base.filter(i =>
       ['keywords', 'title', 'abstract'].includes((i.section || '').toLowerCase())
-    );
+    ));
     return [];
   };
 
