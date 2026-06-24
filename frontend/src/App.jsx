@@ -80,6 +80,9 @@ export default function App() {
   const [suggestion, setSuggestion] = useState(null);
   const [error, setError] = useState(null);
 
+  const [copyStatus, setCopyStatus] = useState('');
+  const [exportText, setExportText] = useState('');
+
   const handleAnalyze = async () => {
     if (!text.trim()) return;
     setLoading(true);
@@ -90,6 +93,8 @@ export default function App() {
     setSuggestion(null);
     setSelectedSection(null);
     setActiveTab('Overview');
+    setCopyStatus('');
+    setExportText('');
     try {
       const data = await analyzeManuscript(text, profile);
       setSessionId(data.sessionId);
@@ -168,26 +173,60 @@ export default function App() {
     setSelectedSection(null);
   };
 
-  const handleExport = () => {
+  const buildExportSummary = () => {
     const profileLabel = PROFILES.find(p => p.value === profile)?.label || profile;
     const lines = [
-      `Research Copilot — Compliance Report`,
+      '=== RESEARCH COPILOT — COMPLIANCE SUMMARY ===',
       `Profile: ${profileLabel}`,
-      `Readiness Score: ${report.overallScore}/100`,
-      ``,
-      `SECTION STATUS`,
-      ...(report.sectionStatus?.map(s => `${s.status === 'Good' ? '[OK]' : '[!]'} ${s.name}${s.note ? ' — ' + s.note : ''}`) || []),
-      ``,
-      `ISSUES (${report.issues?.length ?? 0})`,
-      ...(report.issues?.map(i => `[${i.severity}] ${i.section}: ${i.problem}`) || []),
+      `Readiness Score: ${report.overallScore} / 100`,
+      '',
     ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `compliance-report-${profile}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    if (structured) {
+      lines.push('=== SECTIONS ===');
+      const sectionKeys = [
+        'title', 'abstract', 'keywords', 'introduction',
+        'methodology', 'results', 'conclusion', 'references',
+      ];
+      sectionKeys.forEach(key => {
+        const content = revisedSections[key] || structured[key];
+        if (!content) return;
+        const label = revisedSections[key] ? `[${key.toUpperCase()}] (Revised)` : `[${key.toUpperCase()}]`;
+        lines.push('');
+        lines.push(label);
+        lines.push(typeof content === 'string' ? content : JSON.stringify(content));
+      });
+      lines.push('');
+    }
+
+    if (report.issues?.length > 0) {
+      lines.push('=== COMPLIANCE ISSUES ===');
+      report.issues.forEach(i => {
+        lines.push(`[${i.severity}] ${i.section}: ${i.problem}`);
+        if (i.recommended_action) lines.push(`  → ${i.recommended_action}`);
+      });
+      lines.push('');
+    }
+
+    lines.push('=== AI USE NOTE ===');
+    lines.push(
+      'AI was used to assist with language refinement and formatting; authors reviewed all changes.'
+    );
+
+    return lines.join('\n');
+  };
+
+  const handleExport = async () => {
+    const summary = buildExportSummary();
+    try {
+      await navigator.clipboard.writeText(summary);
+      setCopyStatus('copied');
+      setExportText('');
+    } catch {
+      setExportText(summary);
+      setCopyStatus('failed');
+    }
+    setTimeout(() => setCopyStatus(''), 2500);
   };
 
   const handlePdfUpload = async (e) => {
@@ -322,9 +361,24 @@ export default function App() {
           </button>
 
           {report && (
-            <button className="btn btn-outline" onClick={handleExport} style={{ marginTop: '8px' }}>
-              Export report
-            </button>
+            <>
+              <button
+                className={`btn btn-outline export-btn${copyStatus === 'copied' ? ' export-btn--copied' : ''}`}
+                onClick={handleExport}
+                style={{ marginTop: '8px' }}
+              >
+                {copyStatus === 'copied' ? '✓ Copied to clipboard' : 'Export summary'}
+              </button>
+              {copyStatus === 'failed' && exportText && (
+                <textarea
+                  className="export-fallback"
+                  readOnly
+                  value={exportText}
+                  rows={6}
+                  onClick={(e) => e.target.select()}
+                />
+              )}
+            </>
           )}
 
           {hasRevisions && (
