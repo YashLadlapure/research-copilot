@@ -132,6 +132,8 @@ router.post('/', async (req, res) => {
       sectionsMissing: mergedMissing,
       referencesPresent,
       sections: sectionBodies,
+      // store full normalized text so compliance rules can scan preamble (emails, affiliations)
+      rawText: normalizedText,
     };
   } catch (err) {
     return res.status(502).json({ error: err.message });
