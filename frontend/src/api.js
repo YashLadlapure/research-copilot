@@ -41,6 +41,14 @@ export async function fetchBonusTips(sessionId, profile) {
 }
 
 export async function fetchExportData(sessionId, revisedSections) {
-  const data = await post('/api/export-summary', { sessionId, revisedSections });
-  return data.exportText || '';
+  const res = await fetch(`${BASE}/api/export-summary`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, revisedSections }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `Request failed: ${res.status}` }));
+    throw new Error(err.error || `Request failed: ${res.status}`);
+  }
+  return res.text();
 }
