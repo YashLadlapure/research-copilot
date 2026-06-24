@@ -22,10 +22,10 @@ const NON_REFINABLE = new Set([
 const DASHBOARD_TABS = ['Overview', 'Structure', 'Language', 'Tips', 'AI Disclosure'];
 
 const APA_STEPS = [
-  { label: 'Journal article', example: 'Author, A. A., & Author, B. B. (Year). Title of article. Journal Name, volume(issue), page\u2013page. https://doi.org/xxxxx' },
+  { label: 'Journal article', example: 'Author, A. A., & Author, B. B. (Year). Title of article. Journal Name, volume(issue), page–page. https://doi.org/xxxxx' },
   { label: 'Book', example: 'Author, A. A. (Year). Title of work: Capital letter also for subtitle. Publisher.' },
-  { label: 'Book chapter', example: 'Author, A. A. (Year). Title of chapter. In E. Editor (Ed.), Title of book (pp. xx\u2013xx). Publisher.' },
-  { label: 'Conference paper', example: 'Author, A. A. (Year, Month). Title of paper. In B. Editor (Ed.), Proceedings title (pp. xx\u2013xx). Publisher.' },
+  { label: 'Book chapter', example: 'Author, A. A. (Year). Title of chapter. In E. Editor (Ed.), Title of book (pp. xx–xx). Publisher.' },
+  { label: 'Conference paper', example: 'Author, A. A. (Year, Month). Title of paper. In B. Editor (Ed.), Proceedings title (pp. xx–xx). Publisher.' },
   { label: 'Website / online source', example: 'Author, A. A. (Year, Month Day). Title of page. Site Name. URL' },
 ];
 
@@ -36,7 +36,7 @@ function scoreColor(score) {
 }
 
 function scoreSubtitle(score, issues) {
-  if (!issues || issues.length === 0) return 'No issues detected \u2014 ready for submission.';
+  if (!issues || issues.length === 0) return 'No issues detected — ready for submission.';
   const critical = issues.filter(i => i.severity === 'Critical');
   const review = issues.filter(i => i.severity === 'Review');
   if (score >= 80) return `Strong draft${critical.length ? `, needs ${critical.map(i => i.section).join(' and ')} cleanup` : ''}.`;
@@ -66,16 +66,16 @@ function ApaGuide() {
   return (
     <div className="apa-guide">
       <button className="apa-guide__toggle" onClick={() => setOpen(o => !o)}>
-        <span>\ud83d\udcd6 APA 7th edition \u2014 how to format references</span>
-        <span className="apa-guide__chevron">{open ? '\u25b2' : '\u25bc'}</span>
+        <span>📖 APA 7th edition — how to format references</span>
+        <span className="apa-guide__chevron">{open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <ol className="apa-guide__list">
-          <li className="apa-guide__rule"><strong>Author format:</strong> Last name, Initials. List all authors up to 20; for 21+, list first 19, add \u2026, then last author.</li>
-          <li className="apa-guide__rule"><strong>Year:</strong> In parentheses immediately after authors \u2014 (2023).</li>
-          <li className="apa-guide__rule"><strong>Title:</strong> Sentence case only \u2014 capitalise the first word and proper nouns. No quotes, no bold.</li>
-          <li className="apa-guide__rule"><strong>Journal name &amp; volume:</strong> Italicise the journal name and volume number \u2014 <em>Journal Name, 12</em>(3).</li>
-          <li className="apa-guide__rule"><strong>DOI / URL:</strong> Always include as a hyperlink. Format: https://doi.org/xxxxx \u2014 no full stop after the URL.</li>
+          <li className="apa-guide__rule"><strong>Author format:</strong> Last name, Initials. List all authors up to 20; for 21+, list first 19, add …, then last author.</li>
+          <li className="apa-guide__rule"><strong>Year:</strong> In parentheses immediately after authors — (2023).</li>
+          <li className="apa-guide__rule"><strong>Title:</strong> Sentence case only — capitalise the first word and proper nouns. No quotes, no bold.</li>
+          <li className="apa-guide__rule"><strong>Journal name &amp; volume:</strong> Italicise the journal name and volume number — <em>Journal Name, 12</em>(3).</li>
+          <li className="apa-guide__rule"><strong>DOI / URL:</strong> Always include as a hyperlink. Format: https://doi.org/xxxxx — no full stop after the URL.</li>
           <li className="apa-guide__rule"><strong>Hanging indent:</strong> First line flush left; subsequent lines indented 0.5 in (1.27 cm).</li>
           <li className="apa-guide__rule"><strong>Order:</strong> Alphabetical by first author's last name. Multiple works by the same author: oldest first.</li>
           {APA_STEPS.map((s, i) => (
@@ -97,19 +97,18 @@ function isNonRefinable(section) {
 function getActionButtons(issue, onRefine, loading, onDismiss) {
   const sec = (issue.section || '').toLowerCase();
 
-  // manualOnly issues (e.g. page count) always show manual note regardless of section
   if (issue.manualOnly) {
     return (
       <div className="issue-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
         <div className="issue-manual-note">
-          \u26a0\ufe0f Must be fixed manually \u2014 this requires structural changes to your manuscript that cannot be auto-applied.
+          ⚠️ Must be fixed manually — this requires structural changes to your manuscript that cannot be auto-applied.
         </div>
         <button
           className="action-btn action-btn--ghost"
           style={{ marginTop: '8px', fontSize: '0.75rem' }}
           onClick={() => onDismiss(issue)}
         >
-          \u2713 Mark as reviewed
+          ✓ Mark as reviewed
         </button>
       </div>
     );
@@ -121,8 +120,8 @@ function getActionButtons(issue, onRefine, loading, onDismiss) {
       <div className="issue-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
         <div className="issue-manual-note">
           {isRef
-            ? '\u26a0\ufe0f Must be fixed manually \u2014 references cannot be auto-edited to avoid citation errors.'
-            : '\u26a0\ufe0f This issue requires manual correction in your manuscript.'}
+            ? '⚠️ Must be fixed manually — references cannot be auto-edited to avoid citation errors.'
+            : '⚠️ This issue requires manual correction in your manuscript.'}
         </div>
         {isRef && <ApaGuide />}
         <button
@@ -130,7 +129,7 @@ function getActionButtons(issue, onRefine, loading, onDismiss) {
           style={{ marginTop: '8px', fontSize: '0.75rem' }}
           onClick={() => onDismiss(issue)}
         >
-          \u2713 Mark as fixed manually
+          ✓ Mark as fixed manually
         </button>
       </div>
     );
@@ -374,7 +373,7 @@ export default function App() {
     <div className="app-root">
       <header className="topbar">
         <div className="topbar-brand">
-          <span className="brand-icon">&#x1F52C;</span>
+          <span className="brand-icon">🔬</span>
           <span className="brand-name">Research Copilot</span>
         </div>
         <p className="topbar-sub">Publication compliance and safe manuscript refinement</p>
@@ -383,7 +382,7 @@ export default function App() {
       {error && (
         <div className="error-banner">
           {error}
-          <button onClick={() => setError(null)}>&#x2715;</button>
+          <button onClick={() => setError(null)}>✕</button>
         </div>
       )}
 
@@ -399,14 +398,14 @@ export default function App() {
           <label className="drop-zone" htmlFor="pdf-upload">
             <div className="drop-zone-inner">
               {pdfLoading
-                ? <span className="drop-hint">Extracting text from PDF\u2026</span>
+                ? <span className="drop-hint">Extracting text from PDF…</span>
                 : <span className="drop-hint">Drop PDF or paste manuscript text below</span>
               }
             </div>
             <input id="pdf-upload" type="file" accept=".pdf,application/pdf" onChange={handlePdfUpload} disabled={pdfLoading} style={{ display: 'none' }} />
           </label>
 
-          <textarea className="textarea" placeholder="Or paste your manuscript text here\u2026" value={text} onChange={(e) => setText(e.target.value)} rows={8} />
+          <textarea className="textarea" placeholder="Or paste your manuscript text here…" value={text} onChange={(e) => setText(e.target.value)} rows={8} />
 
           <label className="field-label">Target publication format</label>
           <select className="select" value={profile} onChange={(e) => setProfile(e.target.value)}>
@@ -414,11 +413,11 @@ export default function App() {
           </select>
 
           <div className="compliance-mode-badge">
-            \u2713 Compliance mode \u2014 fixes grammar, structure &amp; format without changing your claims
+            ✓ Compliance mode — fixes grammar, structure &amp; format without changing your claims
           </div>
 
           <button className="btn btn-primary" onClick={handleAnalyze} disabled={loading || !text.trim()}>
-            {loading && !isRefining ? 'Analyzing\u2026' : 'Analyze manuscript'}
+            {loading && !isRefining ? 'Analyzing…' : 'Analyze manuscript'}
           </button>
 
           {report && (
@@ -428,7 +427,7 @@ export default function App() {
               disabled={exportLoading}
               style={{ marginTop: '8px' }}
             >
-              {exportLoading ? 'Generating PDF\u2026' : 'Export revision report'}
+              {exportLoading ? 'Generating PDF…' : 'Export revision report'}
             </button>
           )}
 
@@ -458,7 +457,7 @@ export default function App() {
           {loading && !isRefining && (
             <div className="loading-state">
               <div className="spinner" />
-              <p>Processing manuscript\u2026</p>
+              <p>Processing manuscript…</p>
             </div>
           )}
 
@@ -497,7 +496,7 @@ export default function App() {
               </div>
 
               <div className="manual-warnings-hint">
-                <span className="manual-warnings-hint__icon">&#x1F4CB;</span>
+                <span className="manual-warnings-hint__icon">📋</span>
                 <span className="manual-warnings-hint__text">
                   This score covers text-level compliance only. Layout rules (font sizes, margins, indentation, equation alignment) require manual verification in your {profileLabel} template.
                   <strong> Export the revision report</strong> to see the full checklist.
@@ -512,8 +511,8 @@ export default function App() {
 
               {activeTab === 'Tips' && (
                 <div className="tips-card">
-                  <p className="tips-title">\u2728 Bonus tips for {profileLabel}</p>
-                  {tipsLoading && <div className="tips-loading">Asking Gemini for publication tips\u2026</div>}
+                  <p className="tips-title">✨ Bonus tips for {profileLabel}</p>
+                  {tipsLoading && <div className="tips-loading">Asking Gemini for publication tips…</div>}
                   {!tipsLoading && bonusTips?.tips && (
                     <ol className="tips-list">
                       {bonusTips.tips.map((tip, i) => (
@@ -532,7 +531,7 @@ export default function App() {
                   <p className="ai-disclosure-title">How AI is used in this tool</p>
                   <ul className="ai-disclosure-list">
                     <li>Section extraction uses Gemini 1.5 Flash to identify manuscript structure.</li>
-                    <li>Compliance rules are deterministic \u2014 no AI involved in scoring.</li>
+                    <li>Compliance rules are deterministic — no AI involved in scoring.</li>
                     <li>Refinements are generated by Gemini with strict constraints to avoid meaning changes.</li>
                     <li>All suggestions require author review and approval before applying.</li>
                     <li>No manuscript content is stored permanently. Sessions are in-memory only.</li>
@@ -581,7 +580,7 @@ export default function App() {
                               <div className="section-row-name" style={{ textTransform: 'capitalize' }}>{s.name}</div>
                               <div className="section-row-note">
                                 {isThisRefining
-                                  ? 'Sending to Gemini\u2026'
+                                  ? 'Sending to Gemini…'
                                   : s.note || (isMissing ? 'Not found in manuscript' : 'Detected')}
                               </div>
                               <div className="section-row-right">
@@ -620,7 +619,7 @@ export default function App() {
           {isRefining && (
             <div className="loading-state">
               <div className="spinner" />
-              <p>Gemini is rewriting <strong style={{textTransform:'capitalize'}}>{refiningSection}</strong>\u2026</p>
+              <p>Gemini is rewriting <strong style={{textTransform:'capitalize'}}>{refiningSection}</strong>…</p>
             </div>
           )}
 
