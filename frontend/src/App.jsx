@@ -41,21 +41,11 @@ function scoreSubtitle(score, issues) {
 function getActionButtons(issue, onRefine, loading) {
   const sec = (issue.section || '').toLowerCase();
   const canRefine = !NON_REFINABLE.includes(sec);
-  if (sec === 'abstract') return (
-    <div className="issue-actions">
-      {canRefine && <button className="action-btn" onClick={() => onRefine(issue.section)} disabled={loading}>Shorten abstract</button>}
-      <button className="action-btn action-btn--ghost" onClick={() => onRefine(issue.section)} disabled={loading || !canRefine}>Show rationale</button>
-    </div>
-  );
-  if (sec === 'keywords') return (
-    <div className="issue-actions">
-      {canRefine && <button className="action-btn" onClick={() => onRefine(issue.section)} disabled={loading}>Suggest keywords</button>}
-    </div>
-  );
   if (!canRefine) return null;
+  const label = sec === 'abstract' ? 'Improve abstract' : sec === 'keywords' ? 'Suggest keywords' : 'Refine section';
   return (
     <div className="issue-actions">
-      <button className="action-btn" onClick={() => onRefine(issue.section)} disabled={loading}>Refine section</button>
+      <button className="action-btn" onClick={() => onRefine(issue.section)} disabled={loading}>{label}</button>
     </div>
   );
 }
@@ -175,8 +165,9 @@ export default function App() {
     }
   };
 
+  // Single entry point for ALL refine actions — no intermediate screen
   const handleRefine = async (section) => {
-    if (!sessionId) return;
+    if (!sessionId || loading) return;
     setSelectedSection(section);
     setSuggestion(null);
     setLoading(true);
@@ -186,17 +177,18 @@ export default function App() {
       setSuggestion(data.suggestion);
     } catch (err) {
       setError(err.message);
+      setSelectedSection(null);
     } finally {
       setLoading(false);
     }
   };
 
+  // Clicking a section row directly triggers Gemini refine
   const handleSectionRowClick = (sectionName) => {
-    if (!sessionId) return;
+    if (!sessionId || loading) return;
     const sec = sectionName.toLowerCase();
     if (NON_REFINABLE.includes(sec)) return;
-    setSelectedSection(sectionName);
-    setSuggestion(null);
+    handleRefine(sectionName);
   };
 
   const handleApply = async () => {
@@ -342,11 +334,7 @@ export default function App() {
           </button>
 
           {report && (
-            <button
-              className="btn btn-outline"
-              onClick={handleExport}
-              style={{ marginTop: '8px' }}
-            >
+            <button className="btn btn-outline" onClick={handleExport} style={{ marginTop: '8px' }}>
               {hasRevisions ? 'Download revised paper' : 'Download paper summary'}
             </button>
           )}
@@ -480,19 +468,19 @@ export default function App() {
                         {buildSectionRows().map(s => {
                           const isNonRefinable = NON_REFINABLE.includes(s.name.toLowerCase());
                           const isMissing = s.status === 'Missing';
-                          const isSelected = selectedSection === s.name;
-                          const clickable = sessionId && !isNonRefinable && !isMissing;
+                          const isActive = selectedSection === s.name && loading;
+                          const clickable = sessionId && !isNonRefinable && !isMissing && !loading;
                           return (
                             <div
                               key={s.name}
-                              className={`section-row${clickable ? ' section-row--clickable' : ''}${isSelected ? ' section-row--selected' : ''}`}
+                              className={`section-row${clickable ? ' section-row--clickable' : ''}${isActive ? ' section-row--selected' : ''}`}
                               onClick={() => clickable && handleSectionRowClick(s.name)}
-                              title={clickable ? `Click to refine ${s.name}` : undefined}
+                              title={clickable ? `Click to refine ${s.name} with Gemini` : undefined}
                             >
                               <div className="section-row-name" style={{ textTransform: 'capitalize' }}>{s.name}</div>
                               <div className="section-row-note">
-                                {isSelected
-                                  ? 'Selected — click Refine in the right panel'
+                                {isActive
+                                  ? 'Sending to Gemini…'
                                   : s.note || (isMissing ? 'Not found in manuscript' : 'Detected')}
                               </div>
                               <div className="section-row-right">
@@ -524,25 +512,14 @@ export default function App() {
             <h2>Safe revision preview</h2>
           </div>
 
-          {!suggestion && !loading && !selectedSection && (
-            <div className="empty-state">Click a section row or an issue action to refine a section.</div>
-          )}
-
-          {!suggestion && !loading && selectedSection && (
-            <div className="section-selected-state">
-              <div className="section-selected-name" style={{ textTransform: 'capitalize' }}>{selectedSection}</div>
-              <p className="section-selected-hint">Ready to refine. This will send the section text to Gemini for safe improvement.</p>
-              <button className="btn btn-primary" style={{ marginTop: '12px' }} onClick={() => handleRefine(selectedSection)} disabled={loading}>
-                Refine {selectedSection}
-              </button>
-              <button className="btn btn-outline" style={{ marginTop: '8px' }} onClick={handleReject}>Cancel</button>
-            </div>
+          {!suggestion && !loading && (
+            <div className="empty-state">Click any section or issue button to get a Gemini-powered replacement.</div>
           )}
 
           {loading && selectedSection && (
             <div className="loading-state">
               <div className="spinner" />
-              <p>Generating revision for <strong>{selectedSection}</strong>…</p>
+              <p>Gemini is rewriting <strong style={{textTransform:'capitalize'}}>{selectedSection}</strong>…</p>
             </div>
           )}
 
