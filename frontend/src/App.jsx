@@ -179,7 +179,7 @@ export default function App() {
     setError(null);
     try {
       const exportText = await fetchExportData(sessionId, revisedSections);
-      generateRevisionPdf(exportText, revisedSections, profile, report.overallScore);
+      generateRevisionPdf(exportText, revisedSections, profile, report.overallScore, report.manualWarnings || []);
     } catch (err) {
       setError('Export failed: ' + err.message);
     } finally {
