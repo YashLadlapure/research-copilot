@@ -34,7 +34,7 @@ const REFERENCE_GUIDE = {
     'Format: [1] Author, A., Author, B.: Title of paper. In: Conference Name, pp. xx–xx. Publisher, City (Year)',
     'Format: [2] Author, A.: Title of Book. Publisher, City (Year)',
     'Format: [3] Author, A., Author, B.: Article title. Journal Name vol(issue), pp. xx–xx (Year)',
-    'List references in order of citation in the text — [1] first, [2] second, etc.',
+    'List references in order of citation — [1] first, [2] second, etc.',
     'Use LNCS abbreviation style for conference names (e.g., LNCS, LNAI).',
     'Do not include URLs unless strictly necessary; prefer DOI.',
     'All references must be cited in the text body.',
@@ -43,7 +43,7 @@ const REFERENCE_GUIDE = {
     'Format: [1] A. Author and B. Author, "Title of paper," in Proc. Conf. Name, City, Year, pp. xx–xx.',
     'Format: [2] A. Author, "Article title," Journal Name, vol. x, no. x, pp. xx–xx, Month Year.',
     'Format: [3] A. Author, Title of Book. City: Publisher, Year.',
-    'Number references in order of first appearance in the text [1], [2], [3]…',
+    'Number references in order of first appearance [1], [2], [3]…',
     'Use abbreviated journal and conference names per IEEE style.',
     'Include DOI where available: doi: 10.xxxx/xxxxx',
     'All references must be cited at least once in the body text.',
@@ -133,22 +133,140 @@ function drawWarningCard(doc, warning, index, y) {
   doc.setFontSize(9.5);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 60, 0);
-  titleLines.forEach(line => {
-    doc.text(line, MARGIN + 14, cy);
-    cy += LINE_H;
-  });
+  titleLines.forEach(line => { doc.text(line, MARGIN + 14, cy); cy += LINE_H; });
 
   cy += 2;
 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(80, 60, 20);
-  ruleLines.forEach(line => {
-    doc.text(line, MARGIN + cardPad + 8, cy);
-    cy += LINE_H;
-  });
+  ruleLines.forEach(line => { doc.text(line, MARGIN + cardPad + 8, cy); cy += LINE_H; });
 
   return y + cardH + 4;
+}
+
+// Draws one manual issue card where:
+//   - issue.problem  = the bold heading (matches the issue-title in the UI)
+//   - severity badge + section tag sit on the same row above the heading
+//   - recommended_action appears below as body text
+//   - inline fix guide (references / page count) is rendered inside the card
+function drawManualIssueCard(doc, issue, index, profile, y) {
+  const sec = (issue.section || '').toLowerCase();
+  const isRef = sec === 'references' || sec === 'bibliography';
+  const isPage = issue.manualOnly && (issue.problem || '').toLowerCase().includes('page');
+
+  const innerW = TEXT_W - 12;
+
+  // Pre-measure all text blocks
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  const titleLines = doc.splitTextToSize(issue.problem || '', innerW);
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  const actionLines = issue.recommended_action
+    ? doc.splitTextToSize(issue.recommended_action, innerW)
+    : [];
+
+  const guide = isRef
+    ? (REFERENCE_GUIDE[profile] || REFERENCE_GUIDE.lncs)
+    : isPage
+      ? (PAGE_LIMIT_GUIDE[profile] || PAGE_LIMIT_GUIDE.lncs)
+      : [];
+
+  const guideLineBlocks = guide.map(g => {
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    return doc.splitTextToSize(`  ${g}`, innerW - 4);
+  });
+  const totalGuideLines = guideLineBlocks.reduce((s, b) => s + b.length, 0);
+
+  const PAD = 5;
+  // row1: badge + section tag = 7px
+  // row2: title lines
+  // row3: action lines (if any)
+  // row4: guide label + guide lines (if any)
+  const guideHeaderH = guide.length > 0 ? LINE_H + 3 : 0;
+  const cardH =
+    PAD +
+    7 + 3 +                                         // badge row + gap
+    titleLines.length * LINE_H + 4 +               // heading
+    (actionLines.length ? actionLines.length * LINE_H + 4 : 0) +
+    guideHeaderH +
+    totalGuideLines * LINE_H +
+    PAD;
+
+  if (y + cardH > PAGE_H - MARGIN) { doc.addPage(); y = MARGIN + 6; }
+
+  // Card background — left accent bar colour by severity
+  const accentColor = issue.severity === 'Critical' ? [180, 30, 30] : [180, 120, 0];
+  doc.setFillColor(255, 250, 250);
+  doc.setDrawColor(...accentColor);
+  doc.roundedRect(MARGIN, y, TEXT_W, cardH, 2, 2, 'FD');
+
+  // Left accent bar
+  doc.setFillColor(...accentColor);
+  doc.rect(MARGIN, y, 3, cardH, 'F');
+
+  let cy = y + PAD;
+
+  // ── Row 1: severity badge + section tag ──────────────────────────────────
+  const badgeBg = issue.severity === 'Critical' ? [180, 30, 30] : [180, 120, 0];
+  doc.setFillColor(...badgeBg);
+  doc.roundedRect(MARGIN + 6, cy - 1, 22, 5.5, 1, 1, 'F');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text((issue.severity || 'Review').toUpperCase(), MARGIN + 7, cy + 3.2);
+
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 100, 100);
+  doc.text((issue.section || 'General').toUpperCase(), MARGIN + 32, cy + 3.2);
+
+  cy += 7 + 3;
+
+  // ── Row 2: issue.problem as the primary heading (matches UI issue-title) ──
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 20, 20);
+  titleLines.forEach(line => { doc.text(line, MARGIN + 6, cy); cy += LINE_H; });
+  cy += 4;
+
+  // ── Row 3: recommended_action ─────────────────────────────────────────────
+  if (actionLines.length) {
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    actionLines.forEach(line => { doc.text(line, MARGIN + 6, cy); cy += LINE_H; });
+    cy += 4;
+  }
+
+  // ── Row 4: inline fix guide ───────────────────────────────────────────────
+  if (guide.length > 0) {
+    const profileLabel = profile === 'lncs' ? 'Springer LNCS' : 'IEEE Conference';
+    const guideLabel = isRef
+      ? `How to format ${profileLabel} references:`
+      : `How to fix page count for ${profileLabel}:`;
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(50, 50, 50);
+    doc.text(guideLabel, MARGIN + 6, cy);
+    cy += LINE_H + 3;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    guideLineBlocks.forEach((block, gi) => {
+      block.forEach(line => {
+        doc.text(`${gi + 1}.  ${line.trim()}`, MARGIN + 8, cy);
+        cy += LINE_H;
+      });
+    });
+  }
+
+  return y + cardH + 5;
 }
 
 function drawManualIssueSection(doc, issues, profile, sectionNum, y) {
@@ -176,80 +294,7 @@ function drawManualIssueSection(doc, issues, profile, sectionNum, y) {
   y += 4;
 
   issues.forEach((issue, i) => {
-    if (y > PAGE_H - MARGIN - 40) { doc.addPage(); y = MARGIN + 6; }
-
-    const sec = (issue.section || '').toLowerCase();
-    const isRef = sec === 'references' || sec === 'bibliography';
-    const isPage = issue.manualOnly && (issue.problem || '').toLowerCase().includes('page');
-
-    // Issue card
-    const bg = i % 2 === 0 ? [255, 242, 242] : [255, 255, 255];
-    doc.setFillColor(...bg);
-    doc.setDrawColor(200, 60, 60);
-
-    // Estimate card height first
-    const problemLines = doc.splitTextToSize(issue.problem || '', TEXT_W - 20);
-    const actionLines = issue.recommended_action
-      ? doc.splitTextToSize(issue.recommended_action, TEXT_W - 20)
-      : [];
-    const cardH = 8 + problemLines.length * LINE_H + (actionLines.length ? 4 + actionLines.length * LINE_H : 0) + 6;
-    doc.roundedRect(MARGIN, y, TEXT_W, cardH, 2, 2, 'FD');
-
-    // Severity badge
-    const badgeColor = issue.severity === 'Critical' ? [180, 30, 30] : [180, 120, 0];
-    doc.setFillColor(...badgeColor);
-    doc.roundedRect(MARGIN + 4, y + 3, 18, 5, 1, 1, 'F');
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text(issue.severity || 'Review', MARGIN + 5, y + 7);
-
-    // Section label
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(120, 30, 30);
-    doc.text((issue.section || 'General').toUpperCase(), MARGIN + 26, y + 7);
-
-    let cy = y + 10;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(60, 20, 20);
-    problemLines.forEach(line => { doc.text(line, MARGIN + 6, cy); cy += LINE_H; });
-
-    if (actionLines.length) {
-      cy += 2;
-      doc.setFontSize(8.5);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(80, 40, 40);
-      actionLines.forEach(line => { doc.text(line, MARGIN + 6, cy); cy += LINE_H; });
-    }
-
-    y += cardH + 4;
-
-    // Inline fix guide for references or page count
-    if (isRef) {
-      const guide = REFERENCE_GUIDE[profile] || REFERENCE_GUIDE.lncs;
-      if (y > PAGE_H - MARGIN - 60) { doc.addPage(); y = MARGIN + 6; }
-      y = writeWrapped(doc, `How to fix ${profileLabel} references:`, MARGIN, y, TEXT_W, { size: 9, bold: true, color: [30, 30, 30] });
-      guide.forEach((line, gi) => {
-        if (y > PAGE_H - MARGIN - 10) { doc.addPage(); y = MARGIN + 6; }
-        y = writeWrapped(doc, `  ${gi + 1}.  ${line}`, MARGIN, y, TEXT_W, { size: 8.5, color: [40, 40, 40] });
-        y += 1;
-      });
-      y += 4;
-    }
-
-    if (isPage) {
-      const guide = PAGE_LIMIT_GUIDE[profile] || PAGE_LIMIT_GUIDE.lncs;
-      if (y > PAGE_H - MARGIN - 60) { doc.addPage(); y = MARGIN + 6; }
-      y = writeWrapped(doc, `How to fix page count for ${profileLabel}:`, MARGIN, y, TEXT_W, { size: 9, bold: true, color: [30, 30, 30] });
-      guide.forEach((line, gi) => {
-        if (y > PAGE_H - MARGIN - 10) { doc.addPage(); y = MARGIN + 6; }
-        y = writeWrapped(doc, `  ${gi + 1}.  ${line}`, MARGIN, y, TEXT_W, { size: 8.5, color: [40, 40, 40] });
-        y += 1;
-      });
-      y += 4;
-    }
+    y = drawManualIssueCard(doc, issue, i, profile, y);
   });
 
   return y;
@@ -274,8 +319,8 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(180, 180, 180);
-  doc.text(`Revision Report  ·  ${profileLabel}  ·  ${date}`, MARGIN, 24);
-  doc.text(`Compliance score at export: ${score || '—'}%`, MARGIN, 31);
+  doc.text(`Revision Report  \u00b7  ${profileLabel}  \u00b7  ${date}`, MARGIN, 24);
+  doc.text(`Compliance score at export: ${score || '\u2014'}%`, MARGIN, 31);
   y = 48;
 
   // Section 1: Gemini changes
@@ -307,7 +352,7 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
       y = writeWrapped(doc, `Why: ${why}`, MARGIN, y, TEXT_W, { size: 9, color: [60, 100, 60] });
       y += 2;
       y = writeWrapped(doc, 'Revised text:', MARGIN, y, TEXT_W, { size: 9, bold: true, color: [40, 40, 40] });
-      const preview = revisedText.slice(0, 500) + (revisedText.length > 500 ? '…' : '');
+      const preview = revisedText.slice(0, 500) + (revisedText.length > 500 ? '\u2026' : '');
       y = writeWrapped(doc, preview, MARGIN + 3, y, TEXT_W - 3, { size: 9, color: [40, 40, 40] });
       y += 4;
       y = drawDivider(doc, y);
@@ -315,13 +360,13 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
     });
   }
 
-  // Section 2: Manual issues that need fixing
+  // Section 2: Manual issues
   if (manualIssues.length > 0) {
     y = drawManualIssueSection(doc, manualIssues, profile, 2, y);
     y += 4;
   }
 
-  // Section 3 (or 2 if no manual issues): Publication tips
+  // Publication tips
   const tipsSectionNum = manualIssues.length > 0 ? 3 : 2;
   if (y > PAGE_H - 80) { doc.addPage(); y = MARGIN + 6; }
   y += 4;
@@ -333,7 +378,7 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
     y += 2;
   });
 
-  // Layout warnings section
+  // Layout warnings
   if (manualWarnings.length > 0) {
     const warningSectionNum = tipsSectionNum + 1;
     if (y > PAGE_H - 60) { doc.addPage(); y = MARGIN + 6; }
@@ -371,7 +416,7 @@ export function generateRevisionPdf(exportText, revisedSections, profile, score,
   y += 6;
   writeWrapped(
     doc,
-    'This report was generated by Research Copilot. AI was used only for language refinement — all changes were reviewed and accepted by the author. Final editorial responsibility remains with the authors.',
+    'This report was generated by Research Copilot. AI was used only for language refinement \u2014 all changes were reviewed and accepted by the author. Final editorial responsibility remains with the authors.',
     MARGIN, y, TEXT_W,
     { size: 8, color: [120, 120, 120] }
   );
