@@ -38,20 +38,45 @@ function stripReferencesBlock(text) {
   return idx !== -1 ? text.slice(0, idx) : text;
 }
 
+const ROMAN_NUMERALS = new Set([
+  'II','III','IV','VI','VII','VIII','IX','XI','XII','XIII','XIV','XV',
+  'XVI','XVII','XVIII','XIX','XX','XXI','XXII','I','V','X','L','C','D','M',
+]);
+
+// Matches capitalized surnames: single word, all-caps, 4+ chars, no vowel pattern typical of acronyms
+function looksLikeProperName(word) {
+  // All-caps word that contains no repeated consonant clusters — likely a surname
+  // Heuristic: if it contains at least 2 vowels it's probably a name not an acronym
+  const vowels = (word.match(/[AEIOU]/g) || []).length;
+  return vowels >= 2;
+}
+
 function findUndefinedAcronyms(fullText) {
   const bodyText = stripReferencesBlock(fullText);
-  const acronyms = [...new Set((bodyText.match(/\b[A-Z]{2,6}\b/g) || []))];
+
+  // Only match uppercase tokens of 3–6 chars (exclude 2-char like II, IN, IT etc)
+  const acronyms = [...new Set((bodyText.match(/\b[A-Z]{3,6}\b/g) || []))];
+
   const common = new Set([
-    'AI', 'ML', 'NLP', 'API', 'PDF', 'URL', 'IEEE', 'LNCS', 'IoT',
-    'ID', 'UI', 'UX', 'DB', 'OS', 'CPU', 'GPU', 'RAM', 'RDA', 'GPT',
+    'AI', 'ML', 'NLP', 'API', 'PDF', 'URL', 'IEEE', 'LNCS', 'IOT',
+    'ID', 'UI', 'UX', 'DB', 'OS', 'CPU', 'GPU', 'RAM', 'GPT',
     'DOI', 'ISBN', 'ISSN', 'ACM', 'CRC', 'MIT', 'ETH', 'NSF', 'NIH',
-    'RDA', 'NRC', 'WHO', 'UN', 'USA', 'UK', 'EU', 'IN', 'IT',
+    'NRC', 'WHO', 'USA', 'AND', 'THE', 'FOR', 'WITH', 'FROM',
     'IFCT', 'DHARA', 'AYUSH',
     'SQL', 'CSV', 'JSON', 'XML', 'HTML', 'CSS', 'HTTP', 'REST',
     'GAN', 'CNN', 'RNN', 'LSTM', 'BERT', 'LLM', 'SVM', 'KNN',
+    'EHR', 'EMR', 'ICU', 'NER', 'OCR', 'TTS', 'STT', 'QA',
+    'IOT', 'IOT', 'HIPAA', 'GDPR', 'CLOUD', 'EDGE',
   ]);
+
   return acronyms
-    .filter(acr => !common.has(acr) && !new RegExp(`\\(${acr}\\)`).test(bodyText))
+    .filter(acr => {
+      if (common.has(acr)) return false;
+      if (ROMAN_NUMERALS.has(acr)) return false;
+      if (looksLikeProperName(acr)) return false;  // filter author names
+      if (new RegExp(`\\(${acr}\\)`).test(bodyText)) return false;  // already defined
+      return true;
+    })
     .slice(0, 5);
 }
 
@@ -101,7 +126,7 @@ const MANUAL_WARNINGS = {
     },
     {
       title: 'Page layout',
-      rule: 'LNCS uses A5 paper with a printing area of 122 mm \u00d7 193 mm. Do not override layout settings manually — use the official llncs.cls or DOCX template as-is. The class handles all margins automatically.'
+      rule: 'LNCS uses A5 paper with a printing area of 122 mm × 193 mm. Do not override layout settings manually — use the official llncs.cls or DOCX template as-is. The class handles all margins automatically.'
     },
     {
       title: 'Paragraph indentation',
@@ -109,15 +134,15 @@ const MANUAL_WARNINGS = {
     },
     {
       title: 'Equation alignment and numbering',
-      rule: 'Displayed equations must be centered on their own line. Equation numbers appear in parentheses, right-aligned to the text column. Reference equations consistently using their numbers. Note: adding a period before the equation number is template-dependent, not a universal LNCS requirement.'
+      rule: 'Displayed equations must be centered on their own line. Equation numbers appear in parentheses, right-aligned to the text column. Reference equations consistently using their numbers.'
     },
     {
       title: 'Captions',
-      rule: 'Table captions must appear ABOVE the table. Figure captions must appear BELOW the figure. Short (single-line) captions are centered; long (multi-line) captions are justified. If you use the official template macros, caption placement is handled automatically.'
+      rule: 'Table captions must appear ABOVE the table. Figure captions must appear BELOW the figure. Short (single-line) captions are centered; long (multi-line) captions are justified.'
     },
     {
       title: 'Reference hanging indent',
-      rule: 'Each reference entry must use a hanging indent: first line flush left, all subsequent lines indented. This is a template-level style — verify in the final formatted DOCX or LaTeX output, not in the plain-text manuscript.'
+      rule: 'Each reference entry must use a hanging indent: first line flush left, all subsequent lines indented.'
     },
     {
       title: 'Vector graphics for line art',
@@ -131,36 +156,35 @@ const MANUAL_WARNINGS = {
   ieee: [
     {
       title: 'Font sizes',
-      rule: 'IEEE requires: Paper title — 24pt; Author names — 11pt; Body text — 10pt Times New Roman; Abstract and Index Terms — 9pt. Verify in the official IEEE conference template.'
+      rule: 'IEEE requires: Paper title — 24pt; Author names — 11pt; Body text — 10pt Times New Roman; Abstract and Index Terms — 9pt.'
     },
     {
       title: 'Margins',
-      rule: 'IEEE US Letter margins: Top 0.75in, Bottom 1.69in, Left/Right 0.625in. For A4: Top 19mm, Bottom 43mm, Left/Right 13mm. Never reduce margins below these values.'
+      rule: 'IEEE US Letter margins: Top 0.75in, Bottom 1.69in, Left/Right 0.625in. For A4: Top 19mm, Bottom 43mm, Left/Right 13mm.'
     },
     {
       title: 'Two-column layout',
-      rule: 'IEEE conference papers use a strict two-column layout. Ensure all figures, tables, and equations fit within a single column unless explicitly spanning both columns using the appropriate template macro.'
+      rule: 'IEEE conference papers use a strict two-column layout. Ensure all figures, tables, and equations fit within a single column unless explicitly spanning both columns.'
     },
     {
       title: 'Paragraph indentation',
-      rule: 'Body paragraphs must use a 3.5mm (0.14in) first-line indent. Text must be fully justified (flush left and right). Verify paragraph styles in the IEEE Word or LaTeX template.'
+      rule: 'Body paragraphs must use a 3.5mm (0.14in) first-line indent. Text must be fully justified.'
     },
     {
       title: 'Equation alignment and numbering',
-      rule: 'Equations must be centered on their own line. Equation numbers must appear in parentheses at the right margin. Equations ending a sentence take a period immediately before the closing parenthesis of the equation number.'
+      rule: 'Equations must be centered on their own line. Equation numbers must appear in parentheses at the right margin.'
     },
     {
       title: 'Captions',
-      rule: 'Table captions (TABLE I. format, TABLE in all caps) appear ABOVE the table. Figure captions appear BELOW the figure. Short captions are centered; long captions are justified.'
+      rule: 'Table captions (TABLE I. format, TABLE in all caps) appear ABOVE the table. Figure captions appear BELOW the figure.'
     },
     {
       title: 'Reference hanging indent',
-      rule: 'Each IEEE reference entry must have a hanging indent. The first line is flush left; all subsequent lines are indented. Verify this in the final formatted document.'
+      rule: 'Each IEEE reference entry must have a hanging indent. The first line is flush left; all subsequent lines are indented.'
     },
   ],
 };
 
-// ─── section tag \u2192 nearest real refinable section ────────────────────────────
 const SYNTHETIC_SECTION_MAP = {
   language:        'introduction',
   metadata:        'title',
@@ -234,24 +258,24 @@ function evaluateCompliance(structured, profileConfig) {
   const abstractWords = wordCount(abstractText);
   const minWords = profileConfig.abstractMinWords;
   const maxWords = profileConfig.abstractMaxWords;
-  ruleChecks.push({ rule: 'abstract_word_count', passed: abstractWords >= minWords && abstractWords <= maxWords, observedValue: abstractWords, expected: `${minWords}\u2013${maxWords} words` });
+  ruleChecks.push({ rule: 'abstract_word_count', passed: abstractWords >= minWords && abstractWords <= maxWords, observedValue: abstractWords, expected: `${minWords}–${maxWords} words` });
   if (abstractWords === 0) {
     addIssue({ section: 'abstract', severity: 'Critical', problem: 'Abstract is empty or could not be extracted.', recommended_action: 'Ensure the abstract is clearly labeled and contains content.' });
   } else if (abstractWords > maxWords) {
-    addIssue({ section: 'abstract', severity: 'Critical', problem: `Abstract is ${abstractWords} words \u2014 exceeds the ${profileConfig.name} limit of ${maxWords} words.`, recommended_action: `Shorten the abstract to ${maxWords} words or fewer.` });
+    addIssue({ section: 'abstract', severity: 'Critical', problem: `Abstract is ${abstractWords} words — exceeds the ${profileConfig.name} limit of ${maxWords} words.`, recommended_action: `Shorten the abstract to ${maxWords} words or fewer.` });
   } else if (abstractWords < minWords) {
-    addIssue({ section: 'abstract', severity: 'Review', problem: `Abstract is ${abstractWords} words \u2014 below the ${profileConfig.name} minimum of ${minWords} words.`, recommended_action: `Expand the abstract to at least ${minWords} words.` });
+    addIssue({ section: 'abstract', severity: 'Review', problem: `Abstract is ${abstractWords} words — below the ${profileConfig.name} minimum of ${minWords} words.`, recommended_action: `Expand the abstract to at least ${minWords} words.` });
   }
 
   if (profileConfig.keywordsRequired) {
     const kwCount = Array.isArray(structured.keywords) ? structured.keywords.length : 0;
     const kwOk = kwCount >= profileConfig.keywordsMinCount && kwCount <= profileConfig.keywordsMaxCount;
     const kwLabel = profileConfig.keywordsLabel || 'Keywords';
-    ruleChecks.push({ rule: 'keywords_count', passed: kwOk, observedValue: kwCount, expected: `${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel}` });
+    ruleChecks.push({ rule: 'keywords_count', passed: kwOk, observedValue: kwCount, expected: `${profileConfig.keywordsMinCount}–${profileConfig.keywordsMaxCount} ${kwLabel}` });
     if (kwCount === 0) {
-      addIssue({ section: 'keywords', severity: 'Critical', problem: `No ${kwLabel} detected.`, recommended_action: `Add ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel} directly after the abstract.` });
+      addIssue({ section: 'keywords', severity: 'Critical', problem: `No ${kwLabel} detected.`, recommended_action: `Add ${profileConfig.keywordsMinCount}–${profileConfig.keywordsMaxCount} ${kwLabel} directly after the abstract.` });
     } else if (!kwOk) {
-      addIssue({ section: 'keywords', severity: 'Review', problem: `${kwCount} ${kwLabel} found. ${profileConfig.name} expects ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount}.`, recommended_action: `Adjust to ${profileConfig.keywordsMinCount}\u2013${profileConfig.keywordsMaxCount} ${kwLabel}.` });
+      addIssue({ section: 'keywords', severity: 'Review', problem: `${kwCount} ${kwLabel} found. ${profileConfig.name} expects ${profileConfig.keywordsMinCount}–${profileConfig.keywordsMaxCount}.`, recommended_action: `Adjust to ${profileConfig.keywordsMinCount}–${profileConfig.keywordsMaxCount} ${kwLabel}.` });
     }
   }
 
@@ -272,9 +296,9 @@ function evaluateCompliance(structured, profileConfig) {
 
   const badPunctCount = checkCitationPunctuation(fullText);
   if (badPunctCount > 2) {
-    addIssue({ section: 'references', severity: 'Review', problem: `${badPunctCount} citations appear without a space or punctuation before the bracket (e.g. "word[1]" \u2014 should be "word [1]" or "word.[1]").`, recommended_action: 'Add a space or period before each citation bracket.' });
+    addIssue({ section: 'references', severity: 'Review', problem: `${badPunctCount} citations appear without a space or punctuation before the bracket (e.g. "word[1]" — should be "word [1]" or "word.[1]").`, recommended_action: 'Add a space or period before each citation bracket.' });
   }
-  ruleChecks.push({ rule: 'citation_punctuation', passed: badPunctCount <= 2, observedValue: badPunctCount, expected: '\u22642' });
+  ruleChecks.push({ rule: 'citation_punctuation', passed: badPunctCount <= 2, observedValue: badPunctCount, expected: '≤2' });
 
   const refStyle = checkReferenceListStyle(refText);
   if (refText && refStyle.style === 'author-year' && (profile === 'lncs' || profile === 'ieee')) {
@@ -295,9 +319,9 @@ function evaluateCompliance(structured, profileConfig) {
   }
 
   const emailCheck = checkEmailPresence(rawText);
-  ruleChecks.push({ rule: 'email_present', passed: emailCheck.hasEmail, observedValue: `${emailCheck.count} email(s)`, expected: '\u22651 email' });
+  ruleChecks.push({ rule: 'email_present', passed: emailCheck.hasEmail, observedValue: `${emailCheck.count} email(s)`, expected: '≥1 email' });
   if (!emailCheck.hasEmail) {
-    addIssue({ section: 'metadata', severity: 'Review', problem: 'No author email address detected.', recommended_action: `${profileConfig.name} requires at least the corresponding author\u2019s email address to be listed under the affiliation.` });
+    addIssue({ section: 'metadata', severity: 'Review', problem: 'No author email address detected.', recommended_action: `${profileConfig.name} requires at least the corresponding author's email address to be listed under the affiliation.` });
   }
 
   const headingDepth = checkHeadingDepth(fullText);
@@ -353,19 +377,19 @@ function evaluateCompliance(structured, profileConfig) {
     const estimatedPages = estimatePages(fullText, profile);
     const minPages = (profileConfig.pageRange && profileConfig.pageRange.min) || (profile === 'lncs' ? 10 : 4);
     const maxPages = (profileConfig.pageRange && profileConfig.pageRange.max) || (profile === 'lncs' ? 15 : 6);
-    ruleChecks.push({ rule: 'page_estimate', passed: estimatedPages >= minPages && estimatedPages <= maxPages, observedValue: `~${estimatedPages} pages`, expected: `${minPages}\u2013${maxPages} pages` });
+    ruleChecks.push({ rule: 'page_estimate', passed: estimatedPages >= minPages && estimatedPages <= maxPages, observedValue: `~${estimatedPages} pages`, expected: `${minPages}–${maxPages} pages` });
     if (estimatedPages > maxPages) {
       addManualIssue({
         section: 'structure',
         severity: 'Review',
-        problem: `Estimated length is ~${estimatedPages} pages \u2014 may exceed the ${profileConfig.name} page limit of ${maxPages} pages.`,
+        problem: `Estimated length is ~${estimatedPages} pages — may exceed the ${profileConfig.name} page limit of ${maxPages} pages.`,
         recommended_action: 'Trim content manually: shorten Related Work, merge Results and Discussion, or remove redundant background. Verify actual page count in your formatted template.',
       });
     } else if (estimatedPages < minPages) {
       addManualIssue({
         section: 'structure',
         severity: 'Review',
-        problem: `Estimated length is ~${estimatedPages} pages \u2014 may be below the ${profileConfig.name} minimum of ${minPages} pages.`,
+        problem: `Estimated length is ~${estimatedPages} pages — may be below the ${profileConfig.name} minimum of ${minPages} pages.`,
         recommended_action: 'Expand methodology, results, and discussion sections with more detail.',
       });
     }
