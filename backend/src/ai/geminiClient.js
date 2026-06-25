@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
 const EXTRACTION_SCHEMA = `{
   "title": "string",
@@ -41,8 +41,6 @@ Manuscript text:
 ${text.slice(0, 12000)}`;
 }
 
-// FIX #13: retry prompt now uses the same 12,000-char slice as the first attempt
-// (previously 8,000) so the retry has equal context and a better chance of succeeding.
 function buildRetryPrompt(text) {
   return `Extract the structure of this research paper as a JSON object.
 Return ONLY raw JSON with no markdown, no code fences, no explanation.
