@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
 const EXTRACTION_SCHEMA = `{
   "title": "string",
@@ -52,13 +52,18 @@ ${text.slice(0, 12000)}`;
 }
 
 async function extractSections(text, profile) {
-  const model = genAI.getGenerativeModel({ model: MODEL });
+  const primaryModel = genAI.getGenerativeModel({ model: MODEL });
+  const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
 
-  try {
-    const result = await model.generateContent(buildExtractionPrompt(text, profile));
+  async function tryModel(model, prompt) {
+    const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
     return JSON.parse(cleaned);
+  }
+
+  try {
+    return await tryModel(primaryModel, buildExtractionPrompt(text, profile));
   } catch (firstError) {
     console.error('[Gemini] First attempt error:', firstError?.message || firstError);
 
@@ -67,12 +72,17 @@ async function extractSections(text, profile) {
     }
 
     try {
-      const retryResult = await model.generateContent(buildRetryPrompt(text));
-      const raw = retryResult.response.text().trim();
-      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-      return JSON.parse(cleaned);
+      return await tryModel(primaryModel, buildRetryPrompt(text));
     } catch (retryError) {
       console.error('[Gemini] Retry attempt error:', retryError?.message || retryError);
+      // 503 overload — try fallback model
+      if (retryError?.message?.includes('503') || firstError?.message?.includes('503')) {
+        try {
+          return await tryModel(fallbackModel, buildRetryPrompt(text));
+        } catch (fallbackError) {
+          console.error('[Gemini] Fallback error:', fallbackError?.message || fallbackError);
+        }
+      }
       throw new Error('Gemini section extraction failed after retry. Please try again.');
     }
   }
