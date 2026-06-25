@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
 const COMPLIANCE_INSTRUCTION = `You are a strict academic manuscript editor preparing a paper for formal publication.
 
@@ -66,28 +66,33 @@ function parseJSON(raw) {
 
 async function refineSectionText(sectionText, profile, _mode, constraints = []) {
   const model = genAI.getGenerativeModel({ model: MODEL });
-  const fallback = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+  const fallback = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
   try {
     const result = await model.generateContent(buildPrompt(sectionText, profile, constraints));
     return parseJSON(result.response.text());
   } catch (err) {
     if (err?.message?.includes('429') || err?.message?.includes('quota')) {
-      throw new Error('Gemini quota exceeded. Check your API key at https://aistudio.google.com');
+      try {
+        console.log('[Gemini] Quota hit on primary, trying fallback model...');
+        const fb = await fallback.generateContent(buildPrompt(sectionText, profile, constraints));
+        return parseJSON(fb.response.text());
+      } catch (fbErr) {
+        console.error('[Gemini] Fallback error:', fbErr?.message || fbErr);
+        throw new Error('Gemini quota exceeded. Check your API key at https://aistudio.google.com');
+      }
     }
     try {
       const retry = await model.generateContent(buildRetryPrompt(sectionText, profile, constraints));
       return parseJSON(retry.response.text());
     } catch (retryErr) {
-      if (retryErr?.message?.includes('503') || err?.message?.includes('503')) {
-        try {
-          const fb = await fallback.generateContent(buildRetryPrompt(sectionText, profile, constraints));
-          return parseJSON(fb.response.text());
-        } catch (fbErr) {
-          console.error('[Gemini] Fallback error:', fbErr?.message || fbErr);
-        }
+      try {
+        const fb = await fallback.generateContent(buildRetryPrompt(sectionText, profile, constraints));
+        return parseJSON(fb.response.text());
+      } catch (fbErr) {
+        console.error('[Gemini] Fallback error:', fbErr?.message || fbErr);
+        throw new Error('Gemini refinement failed. Please try again.');
       }
-      throw new Error('Gemini refinement failed. Please try again.');
     }
   }
 }

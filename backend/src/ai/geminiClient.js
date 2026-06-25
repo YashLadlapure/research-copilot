@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
 const EXTRACTION_SCHEMA = `{
   "title": "string",
@@ -53,7 +53,7 @@ ${text.slice(0, 12000)}`;
 
 async function extractSections(text, profile) {
   const primaryModel = genAI.getGenerativeModel({ model: MODEL });
-  const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+  const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
   async function tryModel(model, prompt) {
     const result = await model.generateContent(prompt);
@@ -68,22 +68,25 @@ async function extractSections(text, profile) {
     console.error('[Gemini] First attempt error:', firstError?.message || firstError);
 
     if (firstError?.message?.includes('429') || firstError?.message?.includes('quota')) {
-      throw new Error('Gemini quota exceeded. Please check your API key and model quota at https://ai.dev/rate-limit');
+      try {
+        console.log('[Gemini] Quota hit on primary, trying fallback model...');
+        return await tryModel(fallbackModel, buildExtractionPrompt(text, profile));
+      } catch (fallbackError) {
+        console.error('[Gemini] Fallback error:', fallbackError?.message || fallbackError);
+        throw new Error('Gemini quota exceeded. Please check your API key and model quota at https://ai.dev/rate-limit');
+      }
     }
 
     try {
       return await tryModel(primaryModel, buildRetryPrompt(text));
     } catch (retryError) {
       console.error('[Gemini] Retry attempt error:', retryError?.message || retryError);
-      // 503 overload — try fallback model
-      if (retryError?.message?.includes('503') || firstError?.message?.includes('503')) {
-        try {
-          return await tryModel(fallbackModel, buildRetryPrompt(text));
-        } catch (fallbackError) {
-          console.error('[Gemini] Fallback error:', fallbackError?.message || fallbackError);
-        }
+      try {
+        return await tryModel(fallbackModel, buildRetryPrompt(text));
+      } catch (fallbackError) {
+        console.error('[Gemini] Fallback error:', fallbackError?.message || fallbackError);
+        throw new Error('Gemini section extraction failed after retry. Please try again.');
       }
-      throw new Error('Gemini section extraction failed after retry. Please try again.');
     }
   }
 }
