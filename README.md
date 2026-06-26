@@ -19,6 +19,18 @@ It does not rewrite your paper. It does not change your claims. Every AI-assiste
 
 ---
 
+## Try it fast
+
+1. Open the live demo
+2. Paste any research abstract or upload a PDF
+3. Select **Springer LNCS**
+4. Click **Analyze manuscript**
+5. Hit **Improve abstract** on any flagged issue to see Gemini refine it with a side-by-side diff
+
+No account needed.
+
+---
+
 ## How it works
 
 ```
@@ -40,7 +52,7 @@ Paste/upload manuscript
 |---|---|
 | Frontend | React + Vite → Vercel |
 | Backend | Node.js + Express → Render |
-| AI | Gemini API (`gemini-3.1-flash-lite`) |
+| AI | Gemini API (`gemini-2.5-flash-lite` with `gemini-3.1-flash-lite` as primary, configurable via `GEMINI_MODEL` env) |
 | Storage | In-memory session store |
 
 ---
