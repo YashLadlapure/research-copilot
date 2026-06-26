@@ -63,13 +63,13 @@ Paste/upload manuscript
 ## Run locally
 
 ```bash
-# Backend
+# backend
 cd backend
 npm install
 cp .env.example .env   # add your GEMINI_API_KEY
 npm start
 
-# Frontend
+# frontend
 cd frontend
 npm install
 npm run dev
@@ -84,7 +84,7 @@ Frontend runs on `localhost:5173`, backend on `localhost:4000`.
 ```
 research-copilot/
 ├── frontend/src/
-│   ├── components/       # Upload, Report, DiffViewer, Refine panels
+│   ├── components/       # upload, Report, DiffViewer, Refine panels
 │   └── api.js            # all fetch calls to backend
 └── backend/src/
     ├── ai/
