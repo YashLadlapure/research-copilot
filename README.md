@@ -5,8 +5,7 @@ A web app that checks research manuscripts against Springer LNCS and IEEE Confer
 **Live demo → [research-copilot-eight.vercel.app](https://research-copilot-eight.vercel.app)**
 
 ---
-
-![Compliance dashboard](Screenshot%202026-06-25%20190820.png)
+![Compliance dashboard](docs/demo.png)
 
 ---
 
