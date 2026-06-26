@@ -6,6 +6,10 @@ A web app that checks research manuscripts against Springer LNCS and IEEE Confer
 
 ---
 
+![Compliance dashboard](Screenshot%202026-06-25%20190820.png)
+
+---
+
 ## What it does
 
 Paste or upload a manuscript, pick a target publication format, and get:
