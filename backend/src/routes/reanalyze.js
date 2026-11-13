@@ -1,40 +1,27 @@
 const express = require('express');
-const router = express.Router();
-const { getSession, updateSession } = require('../store');
-const { getProfileConfig } = require('../profiles/index');
+const { getProfile, profileKeys } = require('../profiles');
+const { HttpError } = require('../errors');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
+const { requireSession } = require('./requireSession');
 
-router.post('/', async (req, res) => {
-  const { sessionId } = req.body;
+const router = express.Router();
 
-  if (!sessionId) {
-    return res.status(400).json({ error: '"sessionId" is required.' });
+// Re-runs the rules against a different profile. The manuscript is already
+// parsed, so this needs no Gemini call.
+router.post('/', (req, res) => {
+  const { sessionId, profile: profileKey } = req.body ?? {};
+  const session = requireSession(sessionId);
+
+  const profile = getProfile(profileKey);
+  if (!profile) {
+    throw new HttpError(400, `Unknown profile. Use one of: ${profileKeys.join(', ')}.`);
   }
 
-  const session = getSession(sessionId);
-  if (!session) {
-    return res.status(404).json({ error: 'Session not found.' });
-  }
+  session.profile = profile.key;
+  session.report = evaluateCompliance(session.manuscript, profile);
+  session.pending = {};
 
-  let profileConfig;
-  try {
-    profileConfig = getProfileConfig(session.profile);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  // Re-score directly from the current session sections — no Gemini re-parse.
-  // applySuggestion already updated structuredManuscript with the revised text,
-  // so running evaluateCompliance here reflects the actual applied changes.
-  const complianceReport = evaluateCompliance(session.structuredManuscript, profileConfig);
-
-  updateSession(sessionId, { complianceReport });
-
-  return res.json({
-    sessionId,
-    structuredManuscript: session.structuredManuscript,
-    complianceReport,
-  });
+  res.json({ report: session.report });
 });
 
 module.exports = router;

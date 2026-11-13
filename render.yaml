@@ -2,9 +2,11 @@ services:
   - type: web
     name: research-copilot-api
     runtime: node
+    plan: free
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm ci --omit=dev
     startCommand: npm start
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production

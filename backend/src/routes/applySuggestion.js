@@ -1,112 +1,41 @@
 const express = require('express');
-const router = express.Router();
-const { getSession, updateSession } = require('../store');
-const { getProfileConfig } = require('../profiles/index');
+const { getProfile } = require('../profiles');
+const { HttpError } = require('../errors');
+const { findSection, replaceSectionBody } = require('../manuscript/sections');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
+const { requireSession } = require('./requireSession');
 
-// FIX #10: keywords are always stored as both array (structured.keywords)
-// AND a clean comma-joined string (sections['keywords']) so compliance engine
-// and diff panel both read consistent data.
-function parseKeywords(value) {
-  if (Array.isArray(value)) return value.map(k => k.trim()).filter(Boolean);
-  const str = String(value)
-    .replace(/^keywords?[:\s]*/i, '')
-    .replace(/^index\s+terms?[:\s]*/i, '')
-    .trim();
-  return str.split(/[,;\n]+/).map(k => k.trim()).filter(Boolean);
-}
+const router = express.Router();
 
-function rebuildStructured(structured, targetSection, revisedText) {
-  const secLower = targetSection.toLowerCase();
-  const updatedSections = { ...(structured.sections || {}) };
-
-  if (secLower === 'keywords') {
-    const parsed = parseKeywords(revisedText);
-    // keep sections['keywords'] as the same comma-joined string that the
-    // compliance engine and diff panel will display — not a raw array
-    updatedSections['keywords'] = parsed.join(', ');
-    return { ...structured, keywords: parsed, sections: updatedSections };
-  }
-
-  if (secLower === 'abstract') {
-    updatedSections['abstract'] = revisedText;
-    return { ...structured, abstract: revisedText, sections: updatedSections };
-  }
-
-  if (secLower === 'title') {
-    updatedSections['title'] = revisedText;
-    return { ...structured, title: revisedText, sections: updatedSections };
-  }
-
-  updatedSections[secLower] = revisedText;
-  return { ...structured, sections: updatedSections };
-}
-
+// Applies the suggestion the server generated for this section. The client
+// names the section rather than sending text, so what gets applied is exactly
+// what the author was shown.
 router.post('/', (req, res) => {
-  const { sessionId, targetSection, revisedText } = req.body;
+  const { sessionId, section: sectionName } = req.body ?? {};
+  const session = requireSession(sessionId);
 
-  if (!sessionId || !targetSection) {
-    return res.status(400).json({ error: '"sessionId" and "targetSection" are required.' });
+  const suggestion = typeof sectionName === 'string' ? session.pending[sectionName] : null;
+  if (!suggestion) {
+    throw new HttpError(409, 'There is no suggestion waiting for that section. Request a refinement first.');
+  }
+  const section = findSection(session.manuscript, suggestion.section);
+  if (!section || section.body !== suggestion.originalText) {
+    delete session.pending[suggestion.section];
+    throw new HttpError(409, 'That section has changed since the suggestion was made. Request a new one.');
   }
 
-  if (!revisedText || !revisedText.trim()) {
-    return res.status(400).json({ error: '"revisedText" is required and cannot be empty.' });
-  }
-
-  const session = getSession(sessionId);
-  if (!session) {
-    return res.status(404).json({ error: 'Session not found.' });
-  }
-
-  const structured = session.structuredManuscript;
-  const secLower = targetSection.toLowerCase();
-
-  const sectionMap = structured.sections || {};
-  const topLevelKeys = ['title', 'abstract', 'keywords'];
-  const existsInMap = Object.keys(sectionMap).some(k => k.toLowerCase() === secLower);
-  const existsTopLevel = topLevelKeys.includes(secLower);
-  const existsInDetected = (structured.sectionsDetected || []).some(
-    s => s.toLowerCase() === secLower
-  );
-
-  if (!existsInMap && !existsTopLevel && !existsInDetected) {
-    return res.status(400).json({
-      error: `Section "${targetSection}" not found. Try re-analyzing the manuscript.`,
-    });
-  }
-
-  // FIX #14 (companion): snapshot the original sections the first time a section
-  // is revised so exportSummary can always show the true pre-revision text.
-  const originalSections = session.originalSections || { ...sectionMap };
-  if (!originalSections[secLower]) {
-    originalSections[secLower] = sectionMap[secLower] || '';
-  }
-
-  const updatedManuscript = rebuildStructured(structured, targetSection, revisedText);
-
-  let profileConfig;
-  try {
-    profileConfig = getProfileConfig(session.profile);
-  } catch (_) {
-    profileConfig = null;
-  }
-
-  const newReport = profileConfig
-    ? evaluateCompliance(updatedManuscript, profileConfig)
-    : session.complianceReport;
-
-  updateSession(sessionId, {
-    structuredManuscript: updatedManuscript,
-    complianceReport: newReport,
-    originalSections,
+  session.manuscript = replaceSectionBody(session.manuscript, suggestion.section, suggestion.revisedText);
+  session.report = evaluateCompliance(session.manuscript, getProfile(session.profile));
+  session.revisions.push({
+    section: suggestion.section,
+    originalText: suggestion.originalText,
+    revisedText: suggestion.revisedText,
+    changeSummary: suggestion.changeSummary,
+    appliedAt: new Date().toISOString(),
   });
+  delete session.pending[suggestion.section];
 
-  return res.json({
-    ok: true,
-    applied: targetSection,
-    complianceReport: newReport,
-    structuredManuscript: updatedManuscript,
-  });
+  res.json({ report: session.report, revisions: session.revisions });
 });
 
 module.exports = router;
