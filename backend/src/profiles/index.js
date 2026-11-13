@@ -1,17 +1,12 @@
-const lncsProfile = require('./lncs');
-const ieeeProfile = require('./ieee');
+const lncs = require('./lncs');
+const ieee = require('./ieee');
 
-const profileMap = {
-  lncs: lncsProfile,
-  ieee: ieeeProfile,
-};
+const profiles = { lncs, ieee };
 
-function getProfileConfig(profile) {
-  const key = profile.toLowerCase().trim();
-  if (!profileMap[key]) {
-    throw new Error(`Unsupported profile: "${profile}". Supported profiles are: lncs, ieee.`);
-  }
-  return profileMap[key];
+function getProfile(key) {
+  if (typeof key !== 'string') return null;
+  const normalized = key.toLowerCase().trim();
+  return Object.hasOwn(profiles, normalized) ? profiles[normalized] : null;
 }
 
-module.exports = { getProfileConfig };
+module.exports = { getProfile, profileKeys: Object.keys(profiles) };
