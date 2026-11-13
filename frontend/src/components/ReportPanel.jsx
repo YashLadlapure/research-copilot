@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import IssueList from './IssueList';
+import Tabs from './Tabs';
 import RevisionList from './RevisionList';
 import { CheckTable, SectionList, ManualChecklist } from './ReportTables';
 
@@ -9,7 +10,7 @@ function scoreTone(score) {
   return 'critical';
 }
 
-function Summary({ report, title }) {
+function Summary({ report, title, onExport }) {
   const critical = report.issues.filter((issue) => issue.severity === 'Critical').length;
   const review = report.issues.length - critical;
   const passed = report.checks.filter((check) => check.passed).length;
@@ -30,6 +31,9 @@ function Summary({ report, title }) {
           <span className="badge badge--review">{review} to review</span>
         </p>
       </div>
+      <button type="button" className="btn btn--secondary btn--small summary__export" onClick={onExport}>
+        Print or save report
+      </button>
     </div>
   );
 }
@@ -49,16 +53,16 @@ export default function ReportPanel({
   const revisedSections = new Set(revisions.map((revision) => revision.section));
 
   const tabs = [
-    { id: 'issues', label: `Issues (${report.issues.length})` },
+    { id: 'issues', label: 'Issues', count: report.issues.length },
     { id: 'sections', label: 'Sections' },
     { id: 'checks', label: 'Checks' },
     { id: 'manual', label: 'Manual checklist' },
-    { id: 'revisions', label: `Revisions (${revisedSections.size})` },
+    { id: 'revisions', label: 'Revisions', count: revisedSections.size },
   ];
 
   return (
     <div className="report">
-      <Summary report={report} title={title} />
+      <Summary report={report} title={title} onExport={onExport} />
 
       <p className="field-hint">
         The score starts at 100 and loses 20 for each critical issue and 5 for each issue to review. It covers
@@ -71,25 +75,7 @@ export default function ReportPanel({
         </p>
       )}
 
-      <div className="tabs-row">
-        <div className="tabs" role="tablist" aria-label="Report sections">
-          {tabs.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === option.id}
-              className={`tab${tab === option.id ? ' tab--active' : ''}`}
-              onClick={() => setTab(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="btn btn--secondary btn--small" onClick={onExport}>
-          Print or save report
-        </button>
-      </div>
+      <Tabs options={tabs} value={tab} onChange={setTab} label="Report sections" />
 
       <div role="tabpanel">
         {tab === 'issues' && (

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { diffWords } from 'diff';
+import Tabs from './Tabs';
 
 const VIEWS = [
   { id: 'changes', label: 'Changes' },
@@ -21,22 +22,9 @@ export default function DiffView({ original, revised }) {
 
   return (
     <div className="diff">
-      <div className="segmented" role="tablist" aria-label="Revision view">
-        {VIEWS.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="tab"
-            aria-selected={view === option.id}
-            className={`segmented__option${view === option.id ? ' segmented__option--active' : ''}`}
-            onClick={() => setView(option.id)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Tabs options={VIEWS} value={view} onChange={setView} label="Revision view" variant="segmented" />
 
-      <div className="diff__text" role="tabpanel">
+      <div className="diff__text" role="tabpanel" tabIndex={0}>
         {view === 'original' && before}
         {view === 'revised' && after}
         {view === 'changes' &&

@@ -1,43 +1,67 @@
 function sectionLabel(section) {
-  return section === 'document' ? 'Whole paper' : section;
+  return section === 'document' ? 'Whole paper' : section.charAt(0).toUpperCase() + section.slice(1);
 }
 
-function IssueCard({ issue, acknowledged, refining, canRefine, onRefine, onToggleAcknowledged }) {
+function IssueRow({ issue, acknowledged, refining, busy, onRefine, onToggleAcknowledged }) {
   const severity = issue.severity.toLowerCase();
 
   return (
-    <li className={`issue issue--${severity}${acknowledged ? ' issue--acknowledged' : ''}`}>
-      <div className="issue__meta">
-        <span className={`badge badge--${severity}`}>{issue.severity}</span>
-        <span className="issue__section">{sectionLabel(issue.section)}</span>
+    <li className={`issue${acknowledged ? ' issue--acknowledged' : ''}`}>
+      <div className="issue__body">
+        <p className="issue__meta">
+          <span className={`badge badge--${severity}`}>{issue.severity}</span>
+          <span className="issue__section">{sectionLabel(issue.section)}</span>
+        </p>
+        <p className="issue__problem">{issue.problem}</p>
+        <p className="issue__action">{issue.action}</p>
       </div>
-      <p className="issue__problem">{issue.problem}</p>
-      <p className="issue__action">{issue.action}</p>
-
-      {issue.manualOnly ? (
-        <div className="issue__footer">
-          <span className="issue__manual">Fix this in your own document.</span>
+      <div className="issue__control">
+        {issue.manualOnly ? (
           <button type="button" className="link-button" onClick={() => onToggleAcknowledged(issue.id)}>
             {acknowledged ? 'Reopen' : 'Mark as done'}
           </button>
-        </div>
-      ) : (
-        <div className="issue__footer">
+        ) : (
           <button
             type="button"
             className="btn btn--secondary btn--small"
             onClick={() => onRefine(issue.section)}
-            disabled={!canRefine}
+            disabled={busy}
+            aria-label={`Refine ${issue.section}`}
           >
-            {refining ? 'Revising…' : `Refine ${issue.section}`}
+            {refining ? 'Revising…' : 'Refine'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </li>
   );
 }
 
-export default function IssueList({ issues, acknowledged, refiningSection, busy, onRefine, onToggleAcknowledged }) {
+function IssueGroup({ title, hint, issues, ...rowProps }) {
+  if (issues.length === 0) return null;
+  return (
+    <section className="issue-group">
+      <h3 className="issue-group__title">
+        {title} <span className="issue-group__count">{issues.length}</span>
+      </h3>
+      <p className="field-hint">{hint}</p>
+      <ul className="issue-list">
+        {issues.map((issue) => (
+          <IssueRow
+            key={issue.id}
+            issue={issue}
+            acknowledged={rowProps.acknowledged.has(issue.id)}
+            refining={rowProps.refiningSection === issue.section && !issue.manualOnly}
+            busy={rowProps.busy}
+            onRefine={rowProps.onRefine}
+            onToggleAcknowledged={rowProps.onToggleAcknowledged}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export default function IssueList({ issues, ...rowProps }) {
   if (issues.length === 0) {
     return (
       <div className="empty">
@@ -47,34 +71,29 @@ export default function IssueList({ issues, acknowledged, refiningSection, busy,
     );
   }
 
+  const { acknowledged } = rowProps;
   const open = issues.filter((issue) => !acknowledged.has(issue.id));
-  const done = issues.filter((issue) => acknowledged.has(issue.id));
-
-  const renderCard = (issue) => (
-    <IssueCard
-      key={issue.id}
-      issue={issue}
-      acknowledged={acknowledged.has(issue.id)}
-      refining={refiningSection === issue.section && !issue.manualOnly}
-      canRefine={!busy}
-      onRefine={onRefine}
-      onToggleAcknowledged={onToggleAcknowledged}
-    />
-  );
 
   return (
     <>
-      <ul className="issue-list">{open.map(renderCard)}</ul>
-      {done.length > 0 && (
-        <>
-          <h3 className="list-heading">Marked as done ({done.length})</h3>
-          <p className="field-hint">
-            These still count towards the score, because the app cannot see changes made in your own document.
-            Check the manuscript again after editing it.
-          </p>
-          <ul className="issue-list">{done.map(renderCard)}</ul>
-        </>
-      )}
+      <IssueGroup
+        title="Can be refined here"
+        hint="Wording and length problems. Gemini proposes a revision and you decide whether to keep it."
+        issues={open.filter((issue) => !issue.manualOnly)}
+        {...rowProps}
+      />
+      <IssueGroup
+        title="Fix in your document"
+        hint="Structure, references and formatting. These need changes only you can make."
+        issues={open.filter((issue) => issue.manualOnly)}
+        {...rowProps}
+      />
+      <IssueGroup
+        title="Marked as done"
+        hint="Still counted in the score, because the app cannot see edits made in your own document. Check the manuscript again after editing."
+        issues={issues.filter((issue) => acknowledged.has(issue.id))}
+        {...rowProps}
+      />
     </>
   );
 }

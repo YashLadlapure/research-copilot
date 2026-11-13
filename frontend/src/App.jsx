@@ -40,6 +40,7 @@ export default function App() {
   const [uploadNote, setUploadNote] = useState(null);
   const [error, setError] = useState(null);
 
+  const reportPane = useRef(null);
   const revisionPanel = useRef(null);
   const slow = useSlowHint(analyzing || uploading);
 
@@ -61,6 +62,7 @@ export default function App() {
     setAnalyzing(true);
     setError(null);
     clearSession();
+    reportPane.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     try {
       setAnalysis(await analyzeManuscript(text, profile));
     } catch (err) {
@@ -177,7 +179,7 @@ export default function App() {
             />
           </section>
 
-          <section className="pane pane--report" aria-labelledby="report-heading">
+          <section ref={reportPane} className="pane pane--report" aria-labelledby="report-heading">
             <h2 id="report-heading" className="pane__heading">Compliance report</h2>
             {analyzing && (
               <div className="empty" aria-live="polite">
@@ -209,7 +211,7 @@ export default function App() {
             )}
           </section>
 
-          <section ref={revisionPanel} className="pane pane--revision" aria-labelledby="revision-heading">
+          <section ref={revisionPanel} className="pane pane--revision" aria-labelledby="revision-heading" aria-live="polite">
             <h2 id="revision-heading" className="pane__heading">Revision</h2>
             <RevisionPanel
               refinement={refinement}
