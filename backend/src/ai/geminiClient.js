@@ -1,94 +1,79 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash-lite';
+const REQUEST_TIMEOUT_MS = 30000;
 
-const EXTRACTION_SCHEMA = `{
-  "title": "string",
-  "abstract": "string",
-  "keywords": ["string"],
-  "sections_detected": ["string"],
-  "sections_missing": ["string"],
-  "references_present": true
-}`;
-
-function buildExtractionPrompt(text, profile) {
-  return `You are a research manuscript structure analyzer.
-
-Target publication profile: ${profile.toUpperCase()}
-
-The manuscript below may be plain text extracted from a PDF. Section headings may appear as:
-- Numbered headings: "1 Introduction", "2. Methodology", "3 Results"
-- Unnumbered headings: "Introduction", "Abstract", "Conclusion"
-- Bold or ALL-CAPS labels without markdown formatting
-- "Keywords:" or "Index Terms:" inline before the keyword list
-- "Abstract" as a standalone line or paragraph label
-
-Extract and return ONLY a valid JSON object with exactly these keys:
-${EXTRACTION_SCHEMA}
-
-Rules:
-- "title": the paper title (usually the first prominent line), or empty string
-- "abstract": full abstract text as a single string, or empty string if not found
-- "keywords": array of keyword strings extracted from the Keywords or Index Terms line, or empty array
-- "sections_detected": lowercase array of section names clearly present, e.g. ["introduction", "methodology", "conclusion"]
-- "sections_missing": lowercase array of sections expected for ${profile.toUpperCase()} but not found
-- "references_present": true if a References or Bibliography section exists, false otherwise
-- Do NOT invent content. If a section is absent, list it in sections_missing.
-- Return JSON only. No explanation, no markdown, no code blocks.
-
-Manuscript text:
-${text.slice(0, 12000)}`;
-}
-
-function buildRetryPrompt(text) {
-  return `Extract the structure of this research paper as a JSON object.
-Return ONLY raw JSON with no markdown, no code fences, no explanation.
-Required keys: title (string), abstract (string), keywords (array of strings), sections_detected (array of lowercase strings), sections_missing (array of lowercase strings), references_present (boolean).
-Note: Section headings may be numbered like "1 Introduction" or "2. Methodology" — detect them.
-
-Manuscript:
-${text.slice(0, 12000)}`;
-}
-
-async function extractSections(text, profile) {
-  const primaryModel = genAI.getGenerativeModel({ model: MODEL });
-  const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-
-  async function tryModel(model, prompt) {
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-    return JSON.parse(cleaned);
-  }
-
-  try {
-    return await tryModel(primaryModel, buildExtractionPrompt(text, profile));
-  } catch (firstError) {
-    console.error('[Gemini] First attempt error:', firstError?.message || firstError);
-
-    if (firstError?.message?.includes('429') || firstError?.message?.includes('quota')) {
-      try {
-        console.log('[Gemini] Quota hit on primary, trying fallback model...');
-        return await tryModel(fallbackModel, buildExtractionPrompt(text, profile));
-      } catch (fallbackError) {
-        console.error('[Gemini] Fallback error:', fallbackError?.message || fallbackError);
-        throw new Error('Gemini quota exceeded. Please check your API key and model quota at https://ai.dev/rate-limit');
-      }
-    }
-
-    try {
-      return await tryModel(primaryModel, buildRetryPrompt(text));
-    } catch (retryError) {
-      console.error('[Gemini] Retry attempt error:', retryError?.message || retryError);
-      try {
-        return await tryModel(fallbackModel, buildRetryPrompt(text));
-      } catch (fallbackError) {
-        console.error('[Gemini] Fallback error:', fallbackError?.message || fallbackError);
-        throw new Error('Gemini section extraction failed after retry. Please try again.');
-      }
-    }
+class GeminiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
   }
 }
 
-module.exports = { extractSections };
+let client;
+
+function isConfigured() {
+  return Boolean(process.env.GEMINI_API_KEY);
+}
+
+async function requestJson(modelName, { system, prompt, schema }) {
+  client ??= new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = client.getGenerativeModel(
+    {
+      model: modelName,
+      systemInstruction: system,
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
+    },
+    { timeout: REQUEST_TIMEOUT_MS },
+  );
+  const result = await model.generateContent(prompt);
+  return JSON.parse(result.response.text());
+}
+
+function isAuthError(err) {
+  return err.status === 401 || err.status === 403 || /api key/i.test(err.message || '');
+}
+
+function toGeminiError(err) {
+  if (err instanceof SyntaxError) {
+    return new GeminiError('Gemini returned a response that could not be read. Try again.', 502);
+  }
+  if (isAuthError(err)) {
+    return new GeminiError('Gemini rejected this server\'s API key.', 503);
+  }
+  if (err.status === 429) {
+    return new GeminiError('The Gemini rate limit has been reached. Try again in a minute.', 503);
+  }
+  return new GeminiError('Gemini is unavailable right now. Try again shortly.', 503);
+}
+
+// Malformed JSON is retried once on the same model. API failures such as
+// quota, overload or a timeout go straight to the fallback model, since
+// repeating the same call rarely helps.
+async function generateJson(request) {
+  if (!isConfigured()) {
+    throw new GeminiError('Gemini is not configured on this server.', 503);
+  }
+
+  let lastError;
+  for (const modelName of [PRIMARY_MODEL, FALLBACK_MODEL]) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        return await requestJson(modelName, request);
+      } catch (err) {
+        lastError = err;
+        console.error(`[gemini] ${modelName} attempt ${attempt} failed: ${err.status || ''} ${err.message}`);
+        if (isAuthError(err)) throw toGeminiError(err);
+        if (!(err instanceof SyntaxError)) break;
+      }
+    }
+  }
+  throw toGeminiError(lastError);
+}
+
+module.exports = { generateJson, isConfigured, GeminiError };
