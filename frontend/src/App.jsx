@@ -166,7 +166,7 @@ export default function App() {
   return (
     <>
       <div className="app">
-        <header className="toolbar">
+        <header className={`toolbar${analysis ? '' : ' toolbar--start'}`}>
           <p className="toolbar__name">Research Copilot</p>
           {analysis ? (
             <>

@@ -12,6 +12,13 @@ function scoreTone(score) {
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
+function issueCount(critical, review) {
+  if (critical + review === 0) return 'No issues found.';
+  if (critical === 0) return `${plural(review, 'issue')} to review.`;
+  if (review === 0) return `${plural(critical, 'critical issue')}.`;
+  return `${plural(critical, 'critical issue')} and ${review} to review.`;
+}
+
 function Summary({ report }) {
   const heading = useRef(null);
   const critical = report.issues.filter((issue) => issue.severity === 'Critical').length;
@@ -31,10 +38,7 @@ function Summary({ report }) {
         <span className="summary__scale">out of 100 for {report.profile.name}</span>
       </h1>
       <p className="summary__meta">
-        {report.issues.length === 0
-          ? 'No issues found.'
-          : `${plural(critical, 'critical issue')} and ${review} to review.`}{' '}
-        {passed} of {report.checks.length} automated checks passed.
+        {issueCount(critical, review)} {passed} of {report.checks.length} automated checks passed.
       </p>
       <p className="summary__sum">
         100 − {critical} × 20 − {review} × 5. Layout is not scored; it is on the manual checklist.

@@ -33,7 +33,7 @@
   --radius-pane: 24px;
   --radius-control: 12px;
   --gutter: 16px;
-  --sheet-pad: 64px;
+  --sheet-pad: 80px;
   --margin-gap: 28px;
   --margin-width: 20rem;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -154,6 +154,13 @@ input {
   min-height: 52px;
   padding: 8px 10px 8px 22px;
   border-radius: 26px;
+}
+
+/* Before a paper is checked there is nothing to control, so the bar shrinks
+   to the name alone. */
+.toolbar--start {
+  align-self: center;
+  padding-right: 22px;
 }
 
 .toolbar__name {
@@ -658,9 +665,8 @@ input {
 .proof {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 46rem) var(--margin-width);
+  grid-template-columns: minmax(0, 1fr) var(--margin-width);
   column-gap: var(--margin-gap);
-  justify-content: center;
 }
 
 .sheet,
@@ -809,6 +815,7 @@ input {
   text-decoration: underline 2px;
   text-decoration-color: rgb(196 112 0 / 0.75);
   text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
   cursor: pointer;
@@ -1061,6 +1068,7 @@ input {
   }
 
   .toolbar {
+    position: static;
     padding: 10px 12px 10px 16px;
     border-radius: 22px;
   }
