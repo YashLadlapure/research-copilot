@@ -2,9 +2,9 @@ import { PROFILES } from '../profiles';
 
 // Radio buttons drawn as a segmented control, so arrow keys and screen
 // readers treat it as the single choice it is.
-export default function ProfileSwitch({ value, onChange, disabled }) {
+export default function ProfileSwitch({ value, onChange, disabled, ...rest }) {
   return (
-    <fieldset className="switch" disabled={disabled}>
+    <fieldset className="switch" disabled={disabled} {...rest}>
       <legend className="visually-hidden">Target format</legend>
       {PROFILES.map((option) => (
         <label key={option.value} className="switch__option">

@@ -44,6 +44,7 @@ export default function ManuscriptForm({
     <>
       <form
         className={`composer${dragging ? ' composer--dragging' : ''}`}
+        data-tour="composer"
         onSubmit={(event) => {
           event.preventDefault();
           onAnalyze();
@@ -69,8 +70,14 @@ export default function ManuscriptForm({
         />
 
         <div className="composer__bar">
-          <ProfileSwitch value={profile} onChange={onProfileChange} disabled={busy} />
-          <button type="button" className="btn btn--secondary" onClick={() => fileInput.current.click()} disabled={busy}>
+          <ProfileSwitch value={profile} onChange={onProfileChange} disabled={busy} data-tour="format" />
+          <button
+            type="button"
+            className="btn btn--secondary"
+            data-tour="pdf"
+            onClick={() => fileInput.current.click()}
+            disabled={busy}
+          >
             {uploading ? 'Reading the PDF…' : 'Choose a PDF'}
           </button>
           <input
@@ -84,7 +91,7 @@ export default function ManuscriptForm({
             }}
           />
           <span className="composer__count">{words > 0 && `${words.toLocaleString()} words`}</span>
-          <button type="submit" className="btn btn--primary" disabled={busy || words === 0}>
+          <button type="submit" className="btn btn--primary" data-tour="check" disabled={busy || words === 0}>
             {analyzing ? 'Checking…' : 'Check manuscript'}
           </button>
         </div>
@@ -101,7 +108,7 @@ export default function ManuscriptForm({
         )}
       </div>
 
-      <p className="start__sample">
+      <p className="start__sample" data-tour="sample">
         No paper to hand?{' '}
         <button type="button" className="link-button" onClick={onTrySample} disabled={busy}>
           Try the sample paper

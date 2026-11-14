@@ -1193,6 +1193,72 @@ input {
   overflow-wrap: anywhere;
 }
 
+/* First-visit tour: the page dims except for the element being explained. */
+
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.tour__spot {
+  position: fixed;
+  border-radius: 20px;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.9), 0 0 0 100vmax rgb(20 24 40 / 0.5);
+  pointer-events: none;
+  transition: top 0.4s var(--ease-out), left 0.4s var(--ease-out), width 0.4s var(--ease-out), height 0.4s var(--ease-out);
+}
+
+.tour__card {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px 16px;
+  background: rgb(255 255 255 / 0.9);
+  border: 1px solid var(--glass-edge);
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 #fff, 0 2px 6px rgb(20 30 60 / 0.1), 0 24px 60px -12px rgb(20 30 60 / 0.5);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  transition: top 0.4s var(--ease-out), left 0.4s var(--ease-out);
+}
+
+.tour__card:focus-visible {
+  outline: none;
+}
+
+.tour__count {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tour__title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.tour__body {
+  color: var(--ink-soft);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.tour__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.tour__nav {
+  display: flex;
+  gap: 8px;
+}
+
 /* Accessibility and capability fallbacks */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1211,7 +1277,9 @@ input {
   .tabs__tab,
   .switch__option span,
   .mark,
-  .note {
+  .note,
+  .tour__spot,
+  .tour__card {
     transition: none;
   }
 }

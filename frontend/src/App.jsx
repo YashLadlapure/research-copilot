@@ -6,6 +6,8 @@ import ManuscriptForm from './components/ManuscriptForm';
 import ProfileSwitch from './components/ProfileSwitch';
 import ReportPanel from './components/ReportPanel';
 import PrintableReport from './components/PrintableReport';
+import Tour from './components/Tour';
+import { START_TOUR, REPORT_TOUR, tourSeen } from './tourSteps';
 
 const IDLE = { status: 'idle', section: null, suggestion: null, error: null };
 const SLOW_REQUEST_MS = 8000;
@@ -62,6 +64,16 @@ export default function App() {
 
   const [server, setServer] = useServerStatus();
   const slow = useSlowHint(analyzing || uploading);
+
+  // A first-time visitor gets a short tour of each screen once. The button in
+  // the top bar opens it again.
+  const [tour, setTour] = useState(null);
+  const screen = analysis ? REPORT_TOUR : START_TOUR;
+  useEffect(() => {
+    if (tourSeen(screen.key)) return undefined;
+    const timer = setTimeout(() => setTour(screen), 900);
+    return () => clearTimeout(timer);
+  }, [screen]);
 
   const clearSession = () => {
     setAnalysis(null);
@@ -181,7 +193,7 @@ export default function App() {
                 <button type="button" className="btn btn--secondary btn--small" onClick={clearSession}>
                   New check
                 </button>
-                <button type="button" className="btn btn--secondary btn--small" onClick={() => window.print()}>
+                <button type="button" className="btn btn--secondary btn--small" data-tour="print" onClick={() => window.print()}>
                   Print report
                 </button>
               </div>
@@ -193,6 +205,9 @@ export default function App() {
               </p>
             )
           )}
+          <button type="button" className="btn btn--ghost btn--small" onClick={() => setTour(screen)}>
+            How it works
+          </button>
         </header>
 
         {error && (
@@ -241,6 +256,8 @@ export default function App() {
           </main>
         )}
       </div>
+
+      {tour && <Tour key={tour.key} tour={tour} onClose={() => setTour(null)} />}
 
       {analysis && <PrintableReport analysis={analysis} revisions={revisions} acknowledged={acknowledged} />}
     </>
