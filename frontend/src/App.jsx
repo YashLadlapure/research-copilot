@@ -25,34 +25,17 @@ function useSlowHint(active) {
   return slow;
 }
 
-const WAKE_ATTEMPTS = 8;
-const WAKE_RETRY_MS = 8000;
-
-// One failed ping proves little: the instance may be mid-deploy or still
-// starting. Keep trying for about a minute before calling the server down.
+// wakeServer keeps retrying for about two minutes, so one answer settles it.
 function useServerStatus() {
   const [status, setStatus] = useState('waking');
   useEffect(() => {
     let current = true;
-    let attempts = 0;
-    let timer;
-
-    const ping = async () => {
-      attempts += 1;
-      try {
-        await wakeServer();
-        if (current) setStatus('ready');
-      } catch {
-        if (!current) return;
-        if (attempts < WAKE_ATTEMPTS) timer = setTimeout(ping, WAKE_RETRY_MS);
-        else setStatus('down');
-      }
-    };
-    ping();
-
+    wakeServer().then(
+      () => current && setStatus('ready'),
+      () => current && setStatus('down'),
+    );
     return () => {
       current = false;
-      clearTimeout(timer);
     };
   }, []);
   return [status, setStatus];
@@ -60,7 +43,7 @@ function useServerStatus() {
 
 const SERVER_MESSAGES = {
   waking: 'Waking the server. The first check can take up to a minute.',
-  down: 'The server cannot be reached right now. Reload the page in a minute.',
+  down: 'Still no answer from the server. You can try the check anyway.',
 };
 
 export default function App() {

@@ -38,11 +38,28 @@ function post(path, payload) {
   });
 }
 
+const RETRY_DELAY_MS = 5000;
+
+// A sleeping instance answers with a 503 that has no CORS headers, so the
+// browser reports it as a network failure (status 0). Calls that change
+// nothing on the server are safe to repeat until it is awake.
+async function retrying(call, attempts) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await call();
+    } catch (err) {
+      const waking = err.status === 0 || err.status === 503;
+      if (!waking || attempt >= attempts) throw err;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+}
+
 // The API sleeps when idle. Calling this as the page opens starts it waking
 // while the visitor is still reading.
-export const wakeServer = () => request('/health');
+export const wakeServer = () => retrying(() => request('/health'), 24);
 
-export const analyzeManuscript =(text, profile) => post('/api/analyze', { text, profile });
+export const analyzeManuscript = (text, profile) => retrying(() => post('/api/analyze', { text, profile }), 6);
 export const switchProfile = (sessionId, profile) => post('/api/reanalyze', { sessionId, profile });
 export const refineSection = (sessionId, section) => post('/api/refine-section', { sessionId, section });
 export const applySuggestion = (sessionId, section) => post('/api/apply-suggestion', { sessionId, section });
