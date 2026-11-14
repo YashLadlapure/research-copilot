@@ -1,7 +1,7 @@
 const express = require('express');
 const { getProfile } = require('../profiles');
 const { HttpError } = require('../errors');
-const { findSection, replaceSectionBody } = require('../manuscript/sections');
+const { findSection, replaceSectionBody, toDocument } = require('../manuscript/sections');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
 const { requireSession } = require('./requireSession');
 
@@ -35,7 +35,7 @@ router.post('/', (req, res) => {
   });
   delete session.pending[suggestion.section];
 
-  res.json({ report: session.report, revisions: session.revisions });
+  res.json({ report: session.report, revisions: session.revisions, document: toDocument(session.manuscript) });
 });
 
 module.exports = router;

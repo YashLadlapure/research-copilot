@@ -25,7 +25,11 @@ const NOT_ACRONYMS = new Set(['TABLE', 'FIG', 'FIGURE', 'NOTE', 'THE', 'AND', 'F
 
 const EXPECTED_ORDER = ['abstract', 'keywords', 'introduction', 'conclusion', 'acknowledgements', 'references'];
 
-const count = (text, pattern) => (text.match(pattern) || []).length;
+const matches = (text, pattern) => text.match(pattern) || [];
+const count = (text, pattern) => matches(text, pattern).length;
+// The exact phrases that triggered an issue, so the client can mark them in
+// the text. Capped because a long paper can repeat one mistake many times.
+const evidence = (phrases) => [...new Set(phrases)].slice(0, 20);
 const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
 function bodyText(manuscript) {
@@ -116,6 +120,7 @@ function checkHeadingNumbering(manuscript, profile) {
     manualOnly: true,
     problem: `Section headings use ${label[mismatched[0].numbering]} (e.g. "${mismatched[0].heading}"). ${profile.name} uses ${label[numbering]}.`,
     action: `Renumber the headings in the ${profile.name} style: ${example}.`,
+    evidence: evidence(mismatched.map((section) => section.heading)),
   });
 }
 
@@ -132,6 +137,7 @@ function checkHeadingDepth(manuscript, profile) {
     manualOnly: true,
     problem: `${tooDeep.length} ${tooDeep.length === 1 ? 'heading is' : 'headings are'} numbered deeper than ${maxDepth} levels, e.g. "${tooDeep[0].text}".`,
     action: `${profile.name} numbers only the first ${maxDepth} levels. Make lower-level headings unnumbered run-in headings.`,
+    evidence: evidence(tooDeep.map((heading) => heading.text)),
   });
 }
 
@@ -147,6 +153,7 @@ function checkAcknowledgementsHeading(manuscript) {
     manualOnly: true,
     problem: `The acknowledgements heading is numbered ("${section.heading}").`,
     action: 'Remove the section number. Acknowledgements and References are unnumbered.',
+    evidence: [section.heading],
   });
 }
 
@@ -184,7 +191,8 @@ function checkAbstractCitations(manuscript) {
   const abstract = findSection(manuscript, 'abstract');
   if (!abstract) return null;
 
-  const citations = count(abstract.body, NUMERIC_CITATION) + count(abstract.body, PARENTHETICAL_AUTHOR_YEAR);
+  const found = [...matches(abstract.body, NUMERIC_CITATION), ...matches(abstract.body, PARENTHETICAL_AUTHOR_YEAR)];
+  const citations = found.length;
   if (citations === 0) return passed('abstract-citations', 'Abstract free of citations', 'none', 'none');
   return failed('abstract-citations', 'Abstract free of citations', 'none', `${citations} found`, {
     section: 'abstract',
@@ -192,6 +200,7 @@ function checkAbstractCitations(manuscript) {
     manualOnly: true,
     problem: `The abstract contains ${citations} ${citations === 1 ? 'citation' : 'citations'}.`,
     action: 'Remove them. Abstracts are indexed on their own, without the reference list.',
+    evidence: evidence(found),
   });
 }
 
@@ -256,7 +265,8 @@ function checkTitle(manuscript) {
 function checkCitationStyle(manuscript, profile) {
   const text = bodyText(manuscript);
   const numeric = count(text, NUMERIC_CITATION);
-  const authorYear = count(text, PARENTHETICAL_AUTHOR_YEAR) + count(text, NARRATIVE_AUTHOR_YEAR);
+  const authorYearCitations = [...matches(text, PARENTHETICAL_AUTHOR_YEAR), ...matches(text, NARRATIVE_AUTHOR_YEAR)];
+  const authorYear = authorYearCitations.length;
   const observed = `${numeric} numeric, ${authorYear} author–year`;
 
   if (authorYear >= 3 && authorYear > numeric) {
@@ -266,6 +276,7 @@ function checkCitationStyle(manuscript, profile) {
       manualOnly: true,
       problem: `Citations use author–year style (${authorYear} found); ${profile.name} uses numbered citations.`,
       action: 'Change in-text citations to bracketed numbers such as [1] and number the reference list to match.',
+      evidence: evidence(authorYearCitations),
     });
   }
   if (numeric === 0 && authorYear === 0) {
@@ -323,6 +334,7 @@ function checkCaptions(manuscript, profile) {
       manualOnly: true,
       problem: `${capitalize(kind)} captions do not follow the ${profile.name} format (found "${captions[0].slice(0, 40)}").`,
       action: `Format ${kind} captions like this: ${example}`,
+      evidence: evidence(captions),
     });
   });
 }
@@ -337,7 +349,9 @@ function checkAcronyms(manuscript) {
     .split('\n')
     .filter((line) => !isAllCapsLine(line))
     .join('\n');
-  const acronyms = [...new Set((text.match(ACRONYM) || []).map((token) => token.replace(/s$/, '')))];
+  const singular = (token) => token.replace(/s$/, '');
+  const tokens = matches(text, ACRONYM);
+  const acronyms = [...new Set(tokens.map(singular))];
   if (acronyms.length === 0) return null;
 
   const isDefined = (acronym) =>
@@ -362,6 +376,7 @@ function checkAcronyms(manuscript) {
     manualOnly: true,
     problem: `${undefinedAcronyms.length} ${undefinedAcronyms.length === 1 ? 'acronym appears' : 'acronyms appear'} without a definition: ${shown}${more}.`,
     action: 'Spell each one out where it first appears, e.g. "convolutional neural network (CNN)".',
+    evidence: evidence(undefinedAcronyms.map((acronym) => tokens.find((token) => singular(token) === acronym))),
   });
 }
 
@@ -371,7 +386,7 @@ function checkFormalTone(manuscript) {
 
   for (const section of manuscript.sections) {
     if (TONE_EXEMPT.has(section.name)) continue;
-    const found = [...(section.body.match(CONTRACTION) || []), ...(section.body.match(INFORMAL_PHRASE) || [])];
+    const found = [...matches(section.body, CONTRACTION), ...matches(section.body, INFORMAL_PHRASE)];
     if (found.length === 0) continue;
 
     hits += found.length;
@@ -385,6 +400,7 @@ function checkFormalTone(manuscript) {
       problem: `Informal wording in the ${section.name}: ${examples}.`,
       action: 'Replace contractions and conversational phrases with formal equivalents.',
       requirement: `Replace contractions and conversational phrases (such as ${examples}) with formal wording.`,
+      evidence: evidence(found),
     });
   }
 

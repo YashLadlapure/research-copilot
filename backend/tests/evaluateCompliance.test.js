@@ -82,6 +82,19 @@ test('contractions are flagged per section and can be refined', () => {
   assert.equal(report.sections.find((s) => s.name === 'conclusion').status, 'Review');
 });
 
+test('issues carry the exact phrases that triggered them', () => {
+  const report = evaluate(
+    lncsPaper({
+      introduction: "1 Introduction\nSensor networks can't wait [1]. Brokers can't keep up, so earlier work [2] batches SVMs.",
+      method: '2 Method\nThe detector uses a sliding window [3].\nFigure 1: Overview of the pipeline.\nTable 1. Dataset statistics.',
+    }),
+  );
+
+  assert.deepEqual(findIssue(report, 'formal-tone:introduction').evidence, ["can't"]);
+  assert.deepEqual(findIssue(report, 'acronyms:document').evidence, ['SVMs']);
+  assert.deepEqual(findIssue(report, 'figure-captions:document').evidence, ['Figure 1: Overview of the pipeline.']);
+});
+
 test('undefined acronyms are reported, defined and well-known ones are not', () => {
   const report = evaluate(
     lncsPaper({

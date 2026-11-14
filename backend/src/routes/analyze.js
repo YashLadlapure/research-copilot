@@ -3,6 +3,7 @@ const { getProfile, profileKeys } = require('../profiles');
 const { createSession } = require('../store');
 const { HttpError } = require('../errors');
 const { buildManuscript } = require('../manuscript/buildManuscript');
+const { toDocument } = require('../manuscript/sections');
 const { evaluateCompliance } = require('../rules/evaluateCompliance');
 
 const MIN_MANUSCRIPT_CHARS = 200;
@@ -28,7 +29,7 @@ router.post('/', async (req, res) => {
   const report = evaluateCompliance(manuscript, profile);
   const session = createSession({ profile: profile.key, manuscript, report, pending: {}, revisions: [] });
 
-  res.json({ sessionId: session.id, title: manuscript.title, extraction, report });
+  res.json({ sessionId: session.id, title: manuscript.title, extraction, report, document: toDocument(manuscript) });
 });
 
 module.exports = router;

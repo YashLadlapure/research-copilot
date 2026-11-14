@@ -40,6 +40,17 @@ test('analysis falls back to rule-based parsing when Gemini is not configured', 
   assert.match(body.sessionId, /^[0-9a-f-]{36}$/);
 });
 
+test('analysis returns the parsed paper so the client can display it', async () => {
+  const { body } = await analyze();
+
+  assert.deepEqual(body.document.byline, ['Asha Rao and Ben Li', 'Example University, Pune, India', 'asha.rao@example.edu']);
+  assert.deepEqual(
+    body.document.sections.map((section) => section.name),
+    ['abstract', 'keywords', 'introduction', 'method', 'conclusion', 'references'],
+  );
+  assert.equal(body.document.sections[2].heading, '1 Introduction');
+});
+
 test('invalid input is rejected with a JSON error instead of crashing', async () => {
   const cases = [
     [{ text: 123, profile: 'lncs' }, 400],
@@ -133,6 +144,7 @@ test('refine then apply updates the report and records the revision', async (t) 
   assert.equal(apply.body.report.score, 100);
   assert.equal(apply.body.revisions.length, 1);
   assert.equal(apply.body.revisions[0].originalText, informal.split('\n')[1]);
+  assert.equal(apply.body.document.sections.find((section) => section.name === 'conclusion').body, formal);
 
   const again = await post('/api/apply-suggestion', { sessionId: analysis.sessionId, section: 'conclusion' });
   assert.equal(again.status, 409);

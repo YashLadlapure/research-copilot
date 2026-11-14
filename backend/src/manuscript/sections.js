@@ -1,8 +1,12 @@
-const { splitKeywords } = require('./text');
+const { splitKeywords, squash } = require('./text');
 
 // Sections longer than this are not sent for refinement: the model is asked to
 // return the whole section, and long outputs are where it starts dropping text.
 const MAX_REFINABLE_CHARS = 12000;
+
+// Text extracted from a PDF can carry a long run of affiliations and notices
+// before the abstract. The first few lines are enough to show who wrote it.
+const MAX_BYLINE_LINES = 6;
 
 function findSection(manuscript, name) {
   return manuscript.sections.find((section) => section.name === name) || null;
@@ -36,4 +40,21 @@ function refineBlocker(section) {
   return null;
 }
 
-module.exports = { findSection, listKeywords, replaceSectionBody, insertSection, refineBlocker };
+// What the client needs to draw the paper: the lines under the title, each
+// section's text, and which lines inside a section are sub-headings.
+function toDocument(manuscript) {
+  const title = squash(manuscript.title);
+  const byline = manuscript.frontMatter
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !title.includes(squash(line)))
+    .slice(0, MAX_BYLINE_LINES);
+
+  return {
+    byline,
+    subheadings: manuscript.subheadings.map((heading) => heading.text),
+    sections: manuscript.sections.map(({ name, heading, body }) => ({ name, heading, body })),
+  };
+}
+
+module.exports = { findSection, listKeywords, replaceSectionBody, insertSection, refineBlocker, toDocument };
