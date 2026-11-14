@@ -1,17 +1,17 @@
 # Research Copilot
 
-Checks a research manuscript against Springer LNCS or IEEE conference formatting rules, and uses Gemini to refine one section at a time. Every suggested revision is shown as a diff and is only applied when the author accepts it.
+Checks a research manuscript against Springer LNCS or IEEE conference formatting rules, and uses Gemini to refine one section at a time. The report is the paper itself, set as a page with each problem marked where it occurs and explained in the margin. Every suggested revision is shown as tracked changes in place and is only applied when the author accepts it.
 
-**Live demo:** [research-copilot-eight.vercel.app](https://research-copilot-eight.vercel.app). The API runs on a free instance that sleeps when idle, so the first request can take up to a minute. Use the "Use sample paper" link to try it without a manuscript.
+**Live demo:** [research-copilot-eight.vercel.app](https://research-copilot-eight.vercel.app). The API runs on a free instance that sleeps when idle, so the first request can take up to a minute. Use the "Try the sample paper" link to see it work without a manuscript.
 
-![Compliance report with a revision open](docs/demo.png)
+![The sample paper marked up against Springer LNCS](docs/demo.png)
 
 ## What it does
 
 1. Paste manuscript text or upload a PDF.
 2. Pick a target format: Springer LNCS or IEEE Conference.
-3. Get a report: failed checks with severity, a per-section status, a pass/fail table of every automated check, and a checklist of layout rules that cannot be verified from text.
-4. Ask for a refinement of a section. The revision appears as a word-level diff next to the original.
+3. Get the paper back marked up: offending phrases are underlined in the text and each issue sits in the margin beside the section it concerns. A pass/fail table of every automated check and a checklist of layout rules that cannot be verified from text are one tab away.
+4. Ask for a refinement of a section. The revision appears in the paper as a word-level diff.
 5. Accept or discard it. Accepting re-runs the checks.
 6. Print or save the report, including the full text of accepted revisions.
 
@@ -101,10 +101,12 @@ cd backend && npm test  # parser, rule engine, preservation check, refinement re
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | POST | `/api/extract-pdf` | multipart, field `pdf` | `{ text, pages, truncated }` |
-| POST | `/api/analyze` | `{ text, profile }` | `{ sessionId, title, extraction, report }` |
+| POST | `/api/analyze` | `{ text, profile }` | `{ sessionId, title, extraction, report, document }` |
 | POST | `/api/reanalyze` | `{ sessionId, profile }` | `{ report }` for a different profile, no Gemini call |
 | POST | `/api/refine-section` | `{ sessionId, section }` | `{ suggestion }` |
-| POST | `/api/apply-suggestion` | `{ sessionId, section }` | `{ report, revisions }` |
+| POST | `/api/apply-suggestion` | `{ sessionId, section }` | `{ report, revisions, document }` |
+
+`document` is the parsed paper (byline, sections, sub-headings) that the client draws. Each issue in `report` may carry `evidence`: the exact phrases that triggered it, which the client marks in the text.
 
 Errors are `{ "error": "message" }` with a matching status code. A lost session returns 404 with `"code": "SESSION_EXPIRED"`.
 
@@ -125,7 +127,8 @@ frontend/
   src/
     App.jsx                 state and layout
     api.js                  API calls
-    components/             form, report, diff, revision panel, printable report
+    proof.js                places marks and margin notes on the paper
+    components/             form, marked-up paper, margin notes, diff, printable report
 ```
 
 ## Limitations

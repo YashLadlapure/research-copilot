@@ -1,4 +1,3 @@
-import DiffView from './DiffView';
 import { countWords } from '../text';
 
 function PreservationNote({ preservation, warnings }) {
@@ -24,24 +23,14 @@ function PreservationNote({ preservation, warnings }) {
   );
 }
 
-export default function RevisionPanel({ refinement, applying, onAccept, onDiscard, onRetry }) {
+// Sits in the margin beside the section being revised. The proposed text is
+// shown in the paper itself; this card explains it and takes the decision.
+export default function RevisionCard({ refinement, applying, onAccept, onDiscard, onRetry }) {
   const { status, section, suggestion, error } = refinement;
-
-  if (status === 'idle') {
-    return (
-      <div className="empty">
-        <h3>No revision open</h3>
-        <p>
-          Choose <em>Refine</em> on an issue or a section. The proposed text appears here next to the
-          original, and nothing changes until you accept it.
-        </p>
-      </div>
-    );
-  }
 
   if (status === 'loading') {
     return (
-      <div className="empty" aria-live="polite">
+      <div className="revision revision--loading">
         <div className="spinner" />
         <p>Revising the {section}…</p>
       </div>
@@ -50,13 +39,13 @@ export default function RevisionPanel({ refinement, applying, onAccept, onDiscar
 
   if (status === 'error') {
     return (
-      <div className="empty" role="alert">
-        <h3>The {section} could not be revised</h3>
+      <div className="revision" role="alert">
+        <h4 className="revision__title">The {section} could not be revised</h4>
         <p>{error}</p>
         <p>Your manuscript has not been changed.</p>
         <div className="button-row">
-          <button type="button" className="btn btn--secondary" onClick={onRetry}>Try again</button>
-          <button type="button" className="btn btn--ghost" onClick={onDiscard}>Close</button>
+          <button type="button" className="btn btn--secondary btn--small" onClick={onRetry}>Try again</button>
+          <button type="button" className="btn btn--ghost btn--small" onClick={onDiscard}>Close</button>
         </div>
       </div>
     );
@@ -69,7 +58,7 @@ export default function RevisionPanel({ refinement, applying, onAccept, onDiscar
   return (
     <div className="revision">
       <div className="revision__head">
-        <h3 className="revision__section">{suggestion.section}</h3>
+        <h4 className="revision__title">Proposed revision</h4>
         <span className="revision__words">
           {wordsBefore === wordsAfter ? `${wordsAfter} words` : `${wordsBefore} → ${wordsAfter} words`}
         </span>
@@ -81,24 +70,25 @@ export default function RevisionPanel({ refinement, applying, onAccept, onDiscar
         <>
           {suggestion.changeSummary && <p className="revision__summary">{suggestion.changeSummary}</p>}
           <PreservationNote preservation={suggestion.preservation} warnings={suggestion.warnings} />
-          <DiffView original={suggestion.originalText} revised={suggestion.revisedText} />
         </>
       )}
 
       <div className="button-row">
         {!unchanged && (
-          <button type="button" className="btn btn--primary" onClick={onAccept} disabled={applying}>
+          <button type="button" className="btn btn--primary btn--small" onClick={onAccept} disabled={applying}>
             {applying ? 'Applying…' : 'Accept revision'}
           </button>
         )}
-        <button type="button" className="btn btn--secondary" onClick={onDiscard} disabled={applying}>
+        <button type="button" className="btn btn--secondary btn--small" onClick={onDiscard} disabled={applying}>
           {unchanged ? 'Close' : 'Discard'}
         </button>
       </div>
-      <p className="field-hint">
-        Accepting replaces this section in the session and re-runs the checks. Copy the accepted text
-        back into your own document from the Revisions tab.
-      </p>
+      {!unchanged && (
+        <p className="field-hint">
+          Accepting replaces this section here and re-runs the checks. Copy the accepted text into your
+          own document from the Revisions tab.
+        </p>
+      )}
     </div>
   );
 }

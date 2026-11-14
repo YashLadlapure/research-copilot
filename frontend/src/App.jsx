@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
-import { analyzeManuscript, switchProfile, refineSection, applySuggestion, extractPdf } from './api';
+import { wakeServer, analyzeManuscript, switchProfile, refineSection, applySuggestion, extractPdf } from './api';
 import { SAMPLE_MANUSCRIPT } from './sampleManuscript';
-import { profileLabel } from './profiles';
 import ManuscriptForm from './components/ManuscriptForm';
+import ProfileSwitch from './components/ProfileSwitch';
 import ReportPanel from './components/ReportPanel';
-import RevisionPanel from './components/RevisionPanel';
 import PrintableReport from './components/PrintableReport';
 
 const IDLE = { status: 'idle', section: null, suggestion: null, error: null };
@@ -26,6 +25,26 @@ function useSlowHint(active) {
   return slow;
 }
 
+function useServerStatus() {
+  const [status, setStatus] = useState('waking');
+  useEffect(() => {
+    let current = true;
+    wakeServer().then(
+      () => current && setStatus('ready'),
+      () => current && setStatus('down'),
+    );
+    return () => {
+      current = false;
+    };
+  }, []);
+  return status;
+}
+
+const SERVER_MESSAGES = {
+  waking: 'Starting the server, which sleeps when idle…',
+  down: 'The server is not responding. Checks will fail until it is back.',
+};
+
 export default function App() {
   const [text, setText] = useState('');
   const [profile, setProfile] = useState('lncs');
@@ -40,8 +59,7 @@ export default function App() {
   const [uploadNote, setUploadNote] = useState(null);
   const [error, setError] = useState(null);
 
-  const reportPane = useRef(null);
-  const revisionPanel = useRef(null);
+  const server = useServerStatus();
   const slow = useSlowHint(analyzing || uploading);
 
   const clearSession = () => {
@@ -58,18 +76,23 @@ export default function App() {
     setError(err.message);
   };
 
-  const handleAnalyze = async () => {
+  const check = async (manuscript) => {
     setAnalyzing(true);
     setError(null);
-    clearSession();
-    reportPane.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     try {
-      setAnalysis(await analyzeManuscript(text, profile));
+      setAnalysis(await analyzeManuscript(manuscript, profile));
+      window.scrollTo(0, 0);
     } catch (err) {
       setError(err.message);
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const handleTrySample = () => {
+    setText(SAMPLE_MANUSCRIPT);
+    setUploadNote(null);
+    check(SAMPLE_MANUSCRIPT);
   };
 
   const handleProfileChange = async (nextProfile) => {
@@ -93,7 +116,6 @@ export default function App() {
     try {
       const result = await extractPdf(file);
       setText(result.text);
-      clearSession();
       setUploadNote(
         result.truncated
           ? `Read the first 40 of ${result.pages} pages from ${file.name}.`
@@ -109,7 +131,6 @@ export default function App() {
   const handleRefine = async (section) => {
     setRefinement({ status: 'loading', section, suggestion: null, error: null });
     setError(null);
-    revisionPanel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     try {
       const { suggestion } = await refineSection(analysis.sessionId, section);
       setRefinement({ status: 'ready', section, suggestion, error: null });
@@ -123,7 +144,7 @@ export default function App() {
     setApplying(true);
     try {
       const result = await applySuggestion(analysis.sessionId, refinement.section);
-      setAnalysis((current) => ({ ...current, report: result.report }));
+      setAnalysis((current) => ({ ...current, report: result.report, document: result.document }));
       setRevisions(result.revisions);
       setRefinement(IDLE);
     } catch (err) {
@@ -142,14 +163,34 @@ export default function App() {
     });
   };
 
-  const refining = refinement.status === 'loading';
-
   return (
     <>
       <div className="app">
-        <header className="topbar">
-          <h1 className="topbar__name">Research Copilot</h1>
-          <p className="topbar__tagline">Formatting checks and reviewed refinement for LNCS and IEEE papers</p>
+        <header className="toolbar">
+          <p className="toolbar__name">Research Copilot</p>
+          {analysis ? (
+            <>
+              <ProfileSwitch
+                value={profile}
+                onChange={handleProfileChange}
+                disabled={refinement.status === 'loading' || applying}
+              />
+              <div className="toolbar__actions">
+                <button type="button" className="btn btn--secondary btn--small" onClick={clearSession}>
+                  New check
+                </button>
+                <button type="button" className="btn btn--secondary btn--small" onClick={() => window.print()}>
+                  Print report
+                </button>
+              </div>
+            </>
+          ) : (
+            server !== 'ready' && (
+              <p className={`toolbar__status toolbar__status--${server}`} role="status">
+                {SERVER_MESSAGES[server]}
+              </p>
+            )
+          )}
         </header>
 
         {error && (
@@ -159,69 +200,44 @@ export default function App() {
           </div>
         )}
 
-        <main className="workspace">
-          <section className="pane pane--input" aria-labelledby="input-heading">
-            <h2 id="input-heading" className="pane__heading">Manuscript</h2>
+        {analysis ? (
+          <main>
+            <ReportPanel
+              analysis={analysis}
+              revisions={revisions}
+              acknowledged={acknowledged}
+              refinement={refinement}
+              applying={applying}
+              onRefine={handleRefine}
+              onAccept={handleAccept}
+              onDiscard={() => setRefinement(IDLE)}
+              onRetry={() => handleRefine(refinement.section)}
+              onToggleAcknowledged={toggleAcknowledged}
+            />
+          </main>
+        ) : (
+          <main className="start">
+            <h1 className="start__headline">See your paper marked up before you submit it.</h1>
+            <p className="start__lede">
+              Research Copilot checks a manuscript against Springer LNCS or IEEE conference formatting rules
+              and pins each problem to the place it occurs. Wording problems can be rewritten for you to
+              review, with a check that no number or citation changed.
+            </p>
             <ManuscriptForm
               text={text}
               onTextChange={setText}
               profile={profile}
               onProfileChange={handleProfileChange}
-              onAnalyze={handleAnalyze}
+              onAnalyze={() => check(text)}
               onUpload={handleUpload}
-              onLoadSample={() => {
-                setText(SAMPLE_MANUSCRIPT);
-                setUploadNote('Sample paper loaded. It is fictional and contains deliberate formatting problems.');
-              }}
+              onTrySample={handleTrySample}
               analyzing={analyzing}
               uploading={uploading}
               uploadNote={uploadNote}
+              slow={slow}
             />
-          </section>
-
-          <section ref={reportPane} className="pane pane--report" aria-labelledby="report-heading">
-            <h2 id="report-heading" className="pane__heading">Compliance report</h2>
-            {analyzing && (
-              <div className="empty" aria-live="polite">
-                <div className="spinner" />
-                <p>Checking against {profileLabel(profile)}…</p>
-                {slow && <p className="field-hint">The server sleeps when idle and can take up to a minute to wake.</p>}
-              </div>
-            )}
-            {!analyzing && !analysis && (
-              <div className="empty">
-                <h3>Nothing checked yet</h3>
-                <p>
-                  Paste a manuscript or upload a PDF, choose the target format, and run the checks. The report
-                  lists what breaks the format rules and which sections can be refined.
-                </p>
-              </div>
-            )}
-            {!analyzing && analysis && (
-              <ReportPanel
-                analysis={analysis}
-                revisions={revisions}
-                acknowledged={acknowledged}
-                refiningSection={refining ? refinement.section : null}
-                busy={refining || applying}
-                onRefine={handleRefine}
-                onToggleAcknowledged={toggleAcknowledged}
-                onExport={() => window.print()}
-              />
-            )}
-          </section>
-
-          <section ref={revisionPanel} className="pane pane--revision" aria-labelledby="revision-heading" aria-live="polite">
-            <h2 id="revision-heading" className="pane__heading">Revision</h2>
-            <RevisionPanel
-              refinement={refinement}
-              applying={applying}
-              onAccept={handleAccept}
-              onDiscard={() => setRefinement(IDLE)}
-              onRetry={() => handleRefine(refinement.section)}
-            />
-          </section>
-        </main>
+          </main>
+        )}
       </div>
 
       {analysis && <PrintableReport analysis={analysis} revisions={revisions} acknowledged={acknowledged} />}

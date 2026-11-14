@@ -27,45 +27,6 @@ export function CheckTable({ checks }) {
   );
 }
 
-export function SectionList({ sections, revisedSections, refiningSection, busy, onRefine }) {
-  return (
-    <ul className="section-list">
-      {sections.map((section) => {
-        const canRefine = section.present && !section.refineBlocker;
-        return (
-          <li key={section.name} className="section-row">
-            <div className="section-row__main">
-              <span className="section-row__name">{section.name}</span>
-              <span className="section-row__detail">
-                {section.present ? `${section.words.toLocaleString()} words` : 'Not found'}
-                {section.required ? ' · required' : ''}
-                {revisedSections.has(section.name) ? ' · revised' : ''}
-              </span>
-              {section.present && section.refineBlocker && section.name !== 'title' && (
-                <span className="section-row__detail">{section.refineBlocker}</span>
-              )}
-            </div>
-            <span className={`badge badge--${section.status.toLowerCase()}`}>{section.status}</span>
-            {canRefine ? (
-              <button
-                type="button"
-                className="btn btn--secondary btn--small"
-                onClick={() => onRefine(section.name)}
-                disabled={busy}
-                aria-label={`Refine ${section.name}`}
-              >
-                {refiningSection === section.name ? 'Revising…' : 'Refine'}
-              </button>
-            ) : (
-              <span className="section-row__spacer" />
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 export function ManualChecklist({ items, profileName }) {
   return (
     <>

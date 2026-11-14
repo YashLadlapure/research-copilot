@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { PROFILES } from '../profiles';
+import { profileLabel } from '../profiles';
 import { countWords } from '../text';
+import ProfileSwitch from './ProfileSwitch';
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
@@ -11,10 +12,11 @@ export default function ManuscriptForm({
   onProfileChange,
   onAnalyze,
   onUpload,
-  onLoadSample,
+  onTrySample,
   analyzing,
   uploading,
   uploadNote,
+  slow,
 }) {
   const fileInput = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -39,79 +41,78 @@ export default function ManuscriptForm({
   const busy = analyzing || uploading;
 
   return (
-    <form
-      className="form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onAnalyze();
-      }}
-    >
-      <div
-        className={`dropzone${dragging ? ' dropzone--active' : ''}`}
+    <>
+      <form
+        className={`composer${dragging ? ' composer--dragging' : ''}`}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onAnalyze();
+        }}
         onDragOver={(event) => {
           event.preventDefault();
           setDragging(true);
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+        }}
         onDrop={handleDrop}
       >
-        <p className="dropzone__text">
-          {uploading ? 'Extracting text from the PDF…' : 'Drop a PDF here, or'}
-        </p>
-        {!uploading && (
-          <button type="button" className="btn btn--secondary btn--small" onClick={() => fileInput.current.click()}>
-            Choose a PDF
-          </button>
-        )}
-        <input
-          ref={fileInput}
-          type="file"
-          accept="application/pdf,.pdf"
-          hidden
-          onChange={(event) => {
-            acceptFile(event.target.files[0]);
-            event.target.value = '';
-          }}
-        />
-      </div>
-      {fileError && <p className="field-error" role="alert">{fileError}</p>}
-      {uploadNote && <p className="field-hint">{uploadNote}</p>}
-
-      <div className="field">
-        <div className="field__row">
-          <label htmlFor="manuscript-text">Manuscript text</label>
-          <button type="button" className="link-button" onClick={onLoadSample} disabled={busy}>
-            Use sample paper
-          </button>
-        </div>
+        <label htmlFor="manuscript-text" className="visually-hidden">Manuscript text</label>
         <textarea
           id="manuscript-text"
-          className="textarea"
+          className="composer__text"
           value={text}
           onChange={(event) => onTextChange(event.target.value)}
-          placeholder="Paste the full text, starting with the title."
+          placeholder="Paste the full text of your paper, starting with the title. Or drop a PDF here."
           spellCheck={false}
+          disabled={uploading}
         />
-        <p className="field-hint">{words > 0 ? `${words.toLocaleString()} words` : 'Text from an uploaded PDF appears here for you to check.'}</p>
+
+        <div className="composer__bar">
+          <ProfileSwitch value={profile} onChange={onProfileChange} disabled={busy} />
+          <button type="button" className="btn btn--secondary" onClick={() => fileInput.current.click()} disabled={busy}>
+            {uploading ? 'Reading the PDF…' : 'Choose a PDF'}
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(event) => {
+              acceptFile(event.target.files[0]);
+              event.target.value = '';
+            }}
+          />
+          <span className="composer__count">{words > 0 && `${words.toLocaleString()} words`}</span>
+          <button type="submit" className="btn btn--primary" disabled={busy || words === 0}>
+            {analyzing ? 'Checking…' : 'Check manuscript'}
+          </button>
+        </div>
+      </form>
+
+      <div className="start__status" aria-live="polite">
+        {fileError && <p className="field-error" role="alert">{fileError}</p>}
+        {!fileError && uploadNote && !busy && <p className="field-hint">{uploadNote}</p>}
+        {busy && (
+          <p className="field-hint">
+            {analyzing ? `Checking against ${profileLabel(profile)}…` : 'Extracting text from the PDF…'}
+            {slow && ' The server sleeps when idle and can take up to a minute to wake.'}
+          </p>
+        )}
       </div>
 
-      <div className="field">
-        <label htmlFor="profile">Target format</label>
-        <select id="profile" className="select" value={profile} onChange={(event) => onProfileChange(event.target.value)} disabled={busy}>
-          {PROFILES.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <button type="submit" className="btn btn--primary" disabled={busy || words === 0}>
-        {analyzing ? 'Checking…' : 'Check manuscript'}
-      </button>
+      <p className="start__sample">
+        No paper to hand?{' '}
+        <button type="button" className="link-button" onClick={onTrySample} disabled={busy}>
+          Try the sample paper
+        </button>
+        , a made-up one with deliberate mistakes.
+      </p>
 
       <p className="privacy-note">
         Text is sent to this app's server and, for title detection and refinement, to Google's Gemini API.
         It is held in memory for up to an hour and never written to disk. Do not submit work you cannot share.
       </p>
-    </form>
+    </>
   );
 }

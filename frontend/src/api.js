@@ -38,7 +38,11 @@ function post(path, payload) {
   });
 }
 
-export const analyzeManuscript = (text, profile) => post('/api/analyze', { text, profile });
+// The API sleeps when idle. Calling this as the page opens starts it waking
+// while the visitor is still reading.
+export const wakeServer = () => request('/health');
+
+export const analyzeManuscript =(text, profile) => post('/api/analyze', { text, profile });
 export const switchProfile = (sessionId, profile) => post('/api/reanalyze', { sessionId, profile });
 export const refineSection = (sessionId, section) => post('/api/refine-section', { sessionId, section });
 export const applySuggestion = (sessionId, section) => post('/api/apply-suggestion', { sessionId, section });

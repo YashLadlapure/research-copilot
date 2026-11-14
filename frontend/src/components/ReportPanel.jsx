@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import IssueList from './IssueList';
+import { useEffect, useRef, useState } from 'react';
+import Proof from './Proof';
 import Tabs from './Tabs';
 import RevisionList from './RevisionList';
-import { CheckTable, SectionList, ManualChecklist } from './ReportTables';
+import { CheckTable, ManualChecklist } from './ReportTables';
 
 function scoreTone(score) {
   if (score >= 80) return 'good';
@@ -10,64 +10,55 @@ function scoreTone(score) {
   return 'critical';
 }
 
-function Summary({ report, title, onExport }) {
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+function Summary({ report }) {
+  const heading = useRef(null);
   const critical = report.issues.filter((issue) => issue.severity === 'Critical').length;
   const review = report.issues.length - critical;
   const passed = report.checks.filter((check) => check.passed).length;
 
+  // The report replaces the form, so start keyboard and screen-reader users
+  // at its first line.
+  useEffect(() => {
+    heading.current.focus({ preventScroll: true });
+  }, []);
+
   return (
-    <div className="summary">
-      <div className={`summary__score summary__score--${scoreTone(report.score)}`}>
+    <header className="summary">
+      <h1 ref={heading} tabIndex={-1} className={`summary__score summary__score--${scoreTone(report.score)}`}>
         <span className="summary__value">{report.score}</span>
-        <span className="summary__scale">/ 100</span>
-      </div>
-      <div className="summary__body">
-        <p className="summary__title">{title || 'Untitled manuscript'}</p>
-        <p className="summary__meta">
-          {report.profile.name} · {passed} of {report.checks.length} automated checks passed
-        </p>
-        <p className="summary__counts">
-          <span className="badge badge--critical">{critical} critical</span>
-          <span className="badge badge--review">{review} to review</span>
-        </p>
-      </div>
-      <button type="button" className="btn btn--secondary btn--small summary__export" onClick={onExport}>
-        Print or save report
-      </button>
-    </div>
+        <span className="summary__scale">out of 100 for {report.profile.name}</span>
+      </h1>
+      <p className="summary__meta">
+        {report.issues.length === 0
+          ? 'No issues found.'
+          : `${plural(critical, 'critical issue')} and ${review} to review.`}{' '}
+        {passed} of {report.checks.length} automated checks passed.
+      </p>
+      <p className="summary__sum">
+        100 − {critical} × 20 − {review} × 5. Layout is not scored; it is on the manual checklist.
+      </p>
+    </header>
   );
 }
 
-export default function ReportPanel({
-  analysis,
-  revisions,
-  acknowledged,
-  refiningSection,
-  busy,
-  onRefine,
-  onToggleAcknowledged,
-  onExport,
-}) {
-  const [tab, setTab] = useState('issues');
-  const { report, title, extraction } = analysis;
+export default function ReportPanel({ analysis, revisions, ...proofProps }) {
+  const [tab, setTab] = useState('paper');
+  const { report, extraction } = analysis;
   const revisedSections = new Set(revisions.map((revision) => revision.section));
 
   const tabs = [
-    { id: 'issues', label: 'Issues', count: report.issues.length },
-    { id: 'sections', label: 'Sections' },
-    { id: 'checks', label: 'Checks' },
+    { id: 'paper', label: 'Marked-up paper', count: report.issues.length },
+    { id: 'checks', label: 'Checks', count: report.checks.length },
     { id: 'manual', label: 'Manual checklist' },
     { id: 'revisions', label: 'Revisions', count: revisedSections.size },
   ];
 
   return (
     <div className="report">
-      <Summary report={report} title={title} onExport={onExport} />
+      <Summary report={report} />
 
-      <p className="field-hint">
-        The score starts at 100 and loses 20 for each critical issue and 5 for each issue to review. It covers
-        what can be read from the text; layout is on the manual checklist.
-      </p>
       {extraction === 'rules' && (
         <p className="notice notice--info">
           Gemini was unavailable, so the title, abstract and keywords were located by rules alone. If any of them
@@ -75,31 +66,17 @@ export default function ReportPanel({
         </p>
       )}
 
-      <Tabs options={tabs} value={tab} onChange={setTab} label="Report sections" />
+      <Tabs options={tabs} value={tab} onChange={setTab} label="Report views" />
 
       <div role="tabpanel">
-        {tab === 'issues' && (
-          <IssueList
-            issues={report.issues}
-            acknowledged={acknowledged}
-            refiningSection={refiningSection}
-            busy={busy}
-            onRefine={onRefine}
-            onToggleAcknowledged={onToggleAcknowledged}
-          />
+        {tab === 'paper' && <Proof analysis={analysis} revisedSections={revisedSections} {...proofProps} />}
+        {tab !== 'paper' && (
+          <div className="panel">
+            {tab === 'checks' && <CheckTable checks={report.checks} />}
+            {tab === 'manual' && <ManualChecklist items={report.manualChecks} profileName={report.profile.name} />}
+            {tab === 'revisions' && <RevisionList revisions={revisions} />}
+          </div>
         )}
-        {tab === 'sections' && (
-          <SectionList
-            sections={report.sections}
-            revisedSections={revisedSections}
-            refiningSection={refiningSection}
-            busy={busy}
-            onRefine={onRefine}
-          />
-        )}
-        {tab === 'checks' && <CheckTable checks={report.checks} />}
-        {tab === 'manual' && <ManualChecklist items={report.manualChecks} profileName={report.profile.name} />}
-        {tab === 'revisions' && <RevisionList revisions={revisions} />}
       </div>
     </div>
   );

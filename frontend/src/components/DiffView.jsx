@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { diffWords } from 'diff';
+import { reflow } from '../text';
 import Tabs from './Tabs';
 
 const VIEWS = [
@@ -7,12 +8,6 @@ const VIEWS = [
   { id: 'original', label: 'Original' },
   { id: 'revised', label: 'Revised' },
 ];
-
-// PDF text is hard-wrapped at the page width. Joining those lines lets the
-// text reflow in the panel while blank lines still separate paragraphs.
-function reflow(text) {
-  return text.replace(/([^\n])\n(?!\n)/g, '$1 ');
-}
 
 export default function DiffView({ original, revised }) {
   const [view, setView] = useState('changes');
