@@ -25,24 +25,42 @@ function useSlowHint(active) {
   return slow;
 }
 
+const WAKE_ATTEMPTS = 8;
+const WAKE_RETRY_MS = 8000;
+
+// One failed ping proves little: the instance may be mid-deploy or still
+// starting. Keep trying for about a minute before calling the server down.
 function useServerStatus() {
   const [status, setStatus] = useState('waking');
   useEffect(() => {
     let current = true;
-    wakeServer().then(
-      () => current && setStatus('ready'),
-      () => current && setStatus('down'),
-    );
+    let attempts = 0;
+    let timer;
+
+    const ping = async () => {
+      attempts += 1;
+      try {
+        await wakeServer();
+        if (current) setStatus('ready');
+      } catch {
+        if (!current) return;
+        if (attempts < WAKE_ATTEMPTS) timer = setTimeout(ping, WAKE_RETRY_MS);
+        else setStatus('down');
+      }
+    };
+    ping();
+
     return () => {
       current = false;
+      clearTimeout(timer);
     };
   }, []);
-  return status;
+  return [status, setStatus];
 }
 
 const SERVER_MESSAGES = {
-  waking: 'Starting the server, which sleeps when idle…',
-  down: 'The server is not responding. Checks will fail until it is back.',
+  waking: 'Waking the server. The first check can take up to a minute.',
+  down: 'The server cannot be reached right now. Reload the page in a minute.',
 };
 
 export default function App() {
@@ -59,7 +77,7 @@ export default function App() {
   const [uploadNote, setUploadNote] = useState(null);
   const [error, setError] = useState(null);
 
-  const server = useServerStatus();
+  const [server, setServer] = useServerStatus();
   const slow = useSlowHint(analyzing || uploading);
 
   const clearSession = () => {
@@ -81,6 +99,7 @@ export default function App() {
     setError(null);
     try {
       setAnalysis(await analyzeManuscript(manuscript, profile));
+      setServer('ready');
       window.scrollTo(0, 0);
     } catch (err) {
       setError(err.message);
