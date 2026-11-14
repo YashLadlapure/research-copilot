@@ -173,6 +173,8 @@ function checkAbstractLength(manuscript, profile) {
       problem: `The abstract is ${words} words; ${profile.name} allows at most ${maxWords}.`,
       action: `Cut at least ${words - maxWords} words. Refinement can condense it without dropping results.`,
       requirement: `Condense the abstract to at most ${maxWords} words. It is currently ${words} words.`,
+      // Everything past the limit, so the reader can see how much is over.
+      evidence: [abstract.body.trim().split(/\s+/).slice(maxWords).join(' ')],
     });
   }
   if (words < minWords) {

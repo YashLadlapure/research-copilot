@@ -20,6 +20,7 @@ test('an abstract over the limit is critical and can be refined', () => {
   assert.equal(issue.severity, 'Critical');
   assert.equal(issue.manualOnly, false);
   assert.match(issue.requirement, /at most 250 words/);
+  assert.equal(issue.evidence[0].split(' ').length, 50);
   assert.equal(report.score, 80);
 });
 
