@@ -660,6 +660,48 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+/* Filters above the paper */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  min-height: 32px;
+  padding: 4px 14px;
+  background: var(--glass-fill-strong);
+  border: 1px solid var(--glass-edge);
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgb(20 30 60 / 0.1);
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.18s var(--ease-out), color 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
+}
+
+.chip:hover {
+  color: var(--ink);
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.filters__count {
+  margin-left: 4px;
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The proof: a sheet of paper with notes in its margin */
 
 .proof {

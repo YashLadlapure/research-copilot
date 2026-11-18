@@ -155,7 +155,16 @@ export default function Proof({
   onToggleAcknowledged,
 }) {
   const { title, document: paper, report } = analysis;
-  const marked = useMemo(() => markUp(paper, report.issues), [paper, report.issues]);
+  const [criticalOnly, setCriticalOnly] = useState(false);
+  const [hideDone, setHideDone] = useState(false);
+  const visible = useMemo(
+    () =>
+      report.issues.filter(
+        (issue) => (!criticalOnly || issue.severity === 'Critical') && !(hideDone && acknowledged.has(issue.id)),
+      ),
+    [report.issues, criticalOnly, hideDone, acknowledged],
+  );
+  const marked = useMemo(() => markUp(paper, visible), [paper, visible]);
   const [active, setActive] = useState(null);
   const root = useRef(null);
   useMarginLayout(root);
@@ -172,7 +181,22 @@ export default function Proof({
   const summaries = new Map(report.sections.map((section) => [section.name, section]));
 
   return (
-    <div ref={root} className="proof">
+    <>
+      {report.issues.length > 0 && (
+        <div className="filters" role="group" aria-label="Filter issues">
+          <button type="button" className="chip" aria-pressed={criticalOnly} onClick={() => setCriticalOnly(!criticalOnly)}>
+            Critical only
+          </button>
+          <button type="button" className="chip" aria-pressed={hideDone} onClick={() => setHideDone(!hideDone)}>
+            Hide marked as done
+          </button>
+          <span className="filters__count" aria-live="polite">
+            Showing {visible.length} of {report.issues.length} issues
+          </span>
+        </div>
+      )}
+
+      <div ref={root} className="proof">
       <p className="visually-hidden" role="status">{announcement(refinement)}</p>
 
       <article className="sheet" aria-label="Manuscript">
@@ -182,6 +206,12 @@ export default function Proof({
             <p key={line} className="sheet__byline">{line}</p>
           ))}
           <Notes label="Notes on the whole paper" order={0} issues={marked.top} linking={linking} noteActions={noteActions}>
+            {report.issues.length > 0 && visible.length === 0 && (
+              <div className="revision">
+                <h4 className="revision__title">No issues match this filter</h4>
+                <p>Turn a filter off to see the rest.</p>
+              </div>
+            )}
             {report.issues.length === 0 && (
               <div className="revision">
                 <h4 className="revision__title">No issues found</h4>
@@ -205,6 +235,7 @@ export default function Proof({
           />
         ))}
       </article>
-    </div>
+      </div>
+    </>
   );
 }
