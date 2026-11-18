@@ -7,7 +7,18 @@
       name="description"
       content="Check a research manuscript against Springer LNCS or IEEE conference formatting rules and review AI-suggested refinements section by section."
     />
-    <meta name="theme-color" content="#eef1f7" />
+    <meta name="theme-color" content="#eef1f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0d10" media="(prefers-color-scheme: dark)" />
+    <script>
+      (function () {
+        var saved;
+        try {
+          saved = localStorage.getItem('research-copilot-theme');
+        } catch (e) {}
+        var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

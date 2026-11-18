@@ -1259,6 +1259,169 @@ input {
   gap: 8px;
 }
 
+/* Dark theme. index.html sets data-theme on the root before first paint, from
+   the saved choice or the system setting. Screen only, so printing and
+   saving a report always gives dark text on white paper. */
+
+@media screen {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    background: #0d0d10;
+
+    --ink: #f5f5f7;
+    --ink-soft: #d1d1d6;
+    --ink-faint: #a1a1a8;
+    --hairline: rgb(255 255 255 / 0.12);
+    --hairline-strong: rgb(255 255 255 / 0.22);
+
+    --accent: #5eb0ff;
+    --accent-strong: #8cc8ff;
+    --accent-tint: rgb(10 132 255 / 0.22);
+
+    --critical: #ff9d94;
+    --critical-tint: rgb(255 69 58 / 0.22);
+    --review: #ffbf5e;
+    --review-tint: rgb(255 159 10 / 0.2);
+    --good: #6fdc96;
+    --good-tint: rgb(48 209 88 / 0.2);
+
+    --glass-fill: rgb(44 44 50 / 0.58);
+    --glass-fill-strong: rgb(58 58 66 / 0.72);
+    --glass-edge: rgb(255 255 255 / 0.14);
+    --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 44px -18px rgb(0 0 0 / 0.7);
+    --paper: #1c1c20;
+    --paper-shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 30px 70px -30px rgb(0 0 0 / 0.8);
+  }
+
+  :root[data-theme='dark'] body {
+    background:
+      radial-gradient(60rem 40rem at 8% -10%, rgb(40 72 140 / 0.5), transparent 60%),
+      radial-gradient(50rem 36rem at 100% 0%, rgb(92 52 140 / 0.4), transparent 62%),
+      radial-gradient(56rem 40rem at 60% 110%, rgb(120 70 40 / 0.26), transparent 60%),
+      #0d0d10;
+    background-attachment: fixed;
+  }
+
+  :root[data-theme='dark'] .composer__text,
+  :root[data-theme='dark'] .table-wrap,
+  :root[data-theme='dark'] .tabs--underline {
+    scrollbar-color: rgb(255 255 255 / 0.28) transparent;
+  }
+
+  :root[data-theme='dark'] .banner {
+    background: rgb(90 30 30 / 0.7);
+  }
+
+  :root[data-theme='dark'] .btn--secondary {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+
+  :root[data-theme='dark'] .btn--secondary:hover:not(:disabled) {
+    background: rgb(84 84 94 / 0.9);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 3px 8px -2px rgb(0 0 0 / 0.5);
+  }
+
+  :root[data-theme='dark'] .tabs,
+  :root[data-theme='dark'] .switch {
+    background: rgb(118 118 128 / 0.24);
+  }
+
+  :root[data-theme='dark'] .tabs__tab--selected,
+  :root[data-theme='dark'] .switch__option input:checked + span {
+    background: rgb(92 92 100 / 0.95);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 1px 3px rgb(0 0 0 / 0.5);
+  }
+
+  :root[data-theme='dark'] .composer--dragging {
+    background: rgb(20 52 92 / 0.7);
+  }
+
+  :root[data-theme='dark'] .notice--info {
+    background: rgb(20 52 92 / 0.6);
+  }
+
+  :root[data-theme='dark'] .spinner {
+    border-color: rgb(255 255 255 / 0.18);
+    border-top-color: var(--accent-fill);
+  }
+
+  :root[data-theme='dark'] .mark {
+    text-decoration-color: rgb(255 191 94 / 0.85);
+  }
+
+  :root[data-theme='dark'] .mark--critical {
+    text-decoration-color: rgb(255 138 128 / 0.85);
+  }
+
+  :root[data-theme='dark'] .mark--active {
+    background: rgb(255 159 10 / 0.38);
+  }
+
+  :root[data-theme='dark'] .mark--critical.mark--active {
+    background: rgb(255 69 58 / 0.38);
+  }
+
+  :root[data-theme='dark'] .mark--done {
+    background: none;
+    text-decoration-color: rgb(255 255 255 / 0.3);
+  }
+
+  :root[data-theme='dark'] .note,
+  :root[data-theme='dark'] .revision {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 28px -18px rgb(0 0 0 / 0.7);
+  }
+
+  :root[data-theme='dark'] .revision {
+    background: rgb(46 46 54 / 0.94);
+  }
+
+  :root[data-theme='dark'] .note--active {
+    background: rgb(66 66 76 / 0.92);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 34px -18px rgb(0 0 0 / 0.8);
+  }
+
+  :root[data-theme='dark'] .diff__text ins {
+    color: #86e8a8;
+  }
+
+  :root[data-theme='dark'] .diff__text del {
+    color: #ffa59d;
+  }
+
+  :root[data-theme='dark'] .tour__card {
+    background: rgb(40 40 48 / 0.94);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 2px 6px rgb(0 0 0 / 0.4), 0 24px 60px -12px rgb(0 0 0 / 0.8);
+  }
+
+  .theme-toggle {
+    width: 32px;
+    padding: 0;
+  }
+
+  .theme-toggle svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media screen and (prefers-reduced-transparency: reduce), screen and (prefers-contrast: more) {
+  :root[data-theme='dark'] {
+    --glass-fill: #26262b;
+    --glass-fill-strong: #2c2c32;
+    --glass-edge: var(--hairline-strong);
+    --glass-blur: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @media screen {
+    :root[data-theme='dark'] {
+      --glass-fill: rgb(38 38 44 / 0.94);
+      --glass-fill-strong: #2c2c32;
+    }
+  }
+}
+
 /* Accessibility and capability fallbacks */
 
 @media (prefers-reduced-motion: reduce) {

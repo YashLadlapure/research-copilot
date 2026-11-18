@@ -6,6 +6,7 @@ import ManuscriptForm from './components/ManuscriptForm';
 import ProfileSwitch from './components/ProfileSwitch';
 import ReportPanel from './components/ReportPanel';
 import PrintableReport from './components/PrintableReport';
+import ThemeToggle from './components/ThemeToggle';
 import Tour from './components/Tour';
 import { START_TOUR, REPORT_TOUR, tourSeen } from './tourSteps';
 
@@ -205,6 +206,7 @@ export default function App() {
               </p>
             )
           )}
+          <ThemeToggle />
           <button type="button" className="btn btn--ghost btn--small" onClick={() => setTour(screen)}>
             How it works
           </button>
