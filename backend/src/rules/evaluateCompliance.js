@@ -4,11 +4,20 @@ const { findSection, listKeywords, refineBlocker } = require('../manuscript/sect
 const PENALTY = { Critical: 20, Review: 5 };
 
 const NUMERIC_CITATION = /\[\d+(?:\s*[-–,]\s*\d+)*\]/g;
+const NUMERIC_CITATION_GROUP = /\[(\d+(?:\s*[-–,]\s*\d+)*)\]/g;
+const NUMBERED_REFERENCE = /^(?:\[(\d+)\]|(\d{1,3})\.\s)/;
+const YEAR = /\b(?:19|20)\d{2}[a-z]?\b/;
+const CAPITALISED_WORD = /\p{Lu}[\p{L}'’-]+/gu;
+const NAME_FILLERS = new Set(['And', 'Et', 'Al', 'In', 'Proc', 'Proceedings']);
 const PARENTHETICAL_AUTHOR_YEAR = /\([A-Z][^()\d]{1,60}?,?\s(?:19|20)\d{2}[a-z]?(?:;[^()]*)?\)/g;
 const NARRATIVE_AUTHOR_YEAR = /\b[A-Z][a-z]+(?:\set\sal\.|\sand\s[A-Z][a-z]+)?\s\((?:19|20)\d{2}[a-z]?\)/g;
 
 const FIGURE_CAPTION_LINE = /^(?:Fig\.?|Figure|FIGURE)\s*\d+(?:[.:]|\s*$|\s+[A-Z])/;
 const TABLE_CAPTION_LINE = /^(?:Table|TABLE)\s+(?:\d+|[IVXLC]+)(?:[.:]|\s*$|\s+[A-Z])/;
+const FIGURE_CAPTION_NUMBER = /^(?:Fig\.?|Figure|FIGURE)\s*(\d+)/;
+const TABLE_CAPTION_NUMBER = /^(?:Table|TABLE)\s+(\d+|[IVXLC]+)/;
+const FIGURE_MENTION = /\b(?:Fig(?:ure)?s?\.?|FIG\.|FIGURES?)\s*(\d+(?:\s*(?:[-–,]|and|&)\s*\d+)*)/g;
+const TABLE_MENTION = /\b(?:Tables?|TABLES?)\s+((?:\d+|[IVXLC]+)(?:\s*(?:[-–,]|and|&)\s*(?:\d+|[IVXLC]+))*)\b/g;
 
 const CONTRACTION = /\b(?:[A-Za-z]+n['’]t|(?:it|that|there|here|what|let)['’]s|[A-Za-z]+['’](?:re|ve|ll|d|m))\b/gi;
 const INFORMAL_PHRASE = /\b(?:a lot of|lots of|a bunch of|tons of|pretty much|kinda|sorta|gonna|wanna|you can|you will|you should)\b/gi;
@@ -56,16 +65,30 @@ function isPresent(manuscript, name) {
   return Boolean(findSection(manuscript, name));
 }
 
+function keywordRange({ min, max }) {
+  if (min && max) return `${min}–${max}`;
+  if (min) return `at least ${min}`;
+  if (max) return `at most ${max}`;
+  return null;
+}
+
 function missingSectionIssue(name, profile) {
-  const { label, min, max } = profile.keywords;
+  const label = profile.keywords?.label ?? 'Keywords';
+  const range = profile.keywords ? keywordRange(profile.keywords) : null;
+  const numbered = profile.citations === 'numeric';
   const advice = {
     title: ['No title was detected.', 'Put the paper title on the first line of the manuscript.'],
     abstract: ['No abstract was found.', 'Add an abstract introduced by the label "Abstract".'],
     keywords: [
       `No ${label.toLowerCase()} were found.`,
-      `Add ${min}–${max} ${label.toLowerCase()} directly after the abstract, introduced by "${label}".`,
+      `Add ${range ? `${range} ` : ''}${label.toLowerCase()} directly after the abstract, introduced by "${label}".`,
     ],
-    references: ['No reference list was found.', 'Add a "References" section with a numbered list of sources.'],
+    references: [
+      'No reference list was found.',
+      numbered
+        ? 'Add a "References" section with a numbered list of sources.'
+        : 'Add an unnumbered "References" section listing every source cited in the text.',
+    ],
   };
   const [problem, action] = advice[name] || [
     `No ${name} section was found.`,
@@ -163,10 +186,11 @@ function checkAbstractLength(manuscript, profile) {
 
   const words = wordCount(abstract.body);
   const { minWords, maxWords } = profile.abstract;
-  const expected = `${minWords}–${maxWords} words`;
+  if (!minWords && !maxWords) return null;
+  const expected = keywordRange({ min: minWords, max: maxWords }) + ' words';
   const observed = `${words} words`;
 
-  if (words > maxWords) {
+  if (maxWords && words > maxWords) {
     return failed('abstract-length', 'Abstract length', expected, observed, {
       section: 'abstract',
       severity: 'Critical',
@@ -177,7 +201,7 @@ function checkAbstractLength(manuscript, profile) {
       evidence: [abstract.body.trim().split(/\s+/).slice(maxWords).join(' ')],
     });
   }
-  if (words < minWords) {
+  if (minWords && words < minWords) {
     return failed('abstract-length', 'Abstract length', expected, observed, {
       section: 'abstract',
       severity: 'Review',
@@ -208,14 +232,16 @@ function checkAbstractCitations(manuscript) {
 
 function checkKeywordCount(manuscript, profile) {
   const keywords = listKeywords(manuscript);
-  if (keywords.length === 0) return null;
+  if (keywords.length === 0 || !profile.keywords) return null;
 
   const { min, max, label } = profile.keywords;
-  const expected = `${min}–${max}`;
-  if (keywords.length >= min && keywords.length <= max) {
+  const expected = keywordRange(profile.keywords);
+  if (!expected) return null;
+  const tooMany = Boolean(max) && keywords.length > max;
+  const tooFew = Boolean(min) && keywords.length < min;
+  if (!tooMany && !tooFew) {
     return passed('keyword-count', `Number of ${label.toLowerCase()}`, expected, String(keywords.length));
   }
-  const tooMany = keywords.length > max;
   return failed('keyword-count', `Number of ${label.toLowerCase()}`, expected, String(keywords.length), {
     section: 'keywords',
     severity: 'Review',
@@ -223,12 +249,12 @@ function checkKeywordCount(manuscript, profile) {
     action: tooMany
       ? `Remove at least ${keywords.length - max}. Refinement keeps the most specific terms.`
       : `Add at least ${min - keywords.length}. Refinement suggests terms taken from your abstract.`,
-    requirement: `Return between ${min} and ${max} keywords as a comma-separated list, using only terms that appear in the abstract or in the current list.`,
+    requirement: `Return ${min && max ? `between ${min} and ${max}` : expected} keywords as a comma-separated list, using only terms that appear in the abstract or in the current list.`,
   });
 }
 
 function checkKeywordLabel(manuscript, profile) {
-  if (!manuscript.keywordsLabel) return null;
+  if (!manuscript.keywordsLabel || !profile.keywords) return null;
 
   const compact = (text) => text.toLowerCase().replace(/\s+/g, '');
   const expected = profile.keywords.label;
@@ -271,6 +297,21 @@ function checkCitationStyle(manuscript, profile) {
   const authorYear = authorYearCitations.length;
   const observed = `${numeric} numeric, ${authorYear} author–year`;
 
+  if (profile.citations === 'author-year') {
+    const expected = 'author–year, e.g. (Smith, 2020)';
+    if (numeric >= 3 && numeric > authorYear) {
+      return failed('citation-style', 'In-text citation style', expected, observed, {
+        section: 'references',
+        severity: 'Critical',
+        manualOnly: true,
+        problem: `Citations use numbered style (${numeric} found); ${profile.name} uses author–year citations.`,
+        action: 'Cite by author and year, such as (Smith, 2020) or Smith (2020), and list the references alphabetically without numbers.',
+        evidence: evidence(matches(text, NUMERIC_CITATION)),
+      });
+    }
+    return passed('citation-style', 'In-text citation style', expected, observed);
+  }
+
   if (authorYear >= 3 && authorYear > numeric) {
     return failed('citation-style', 'In-text citation style', 'numeric, e.g. [1]', observed, {
       section: 'references',
@@ -299,8 +340,20 @@ function checkReferenceList(manuscript, profile) {
   if (!references || !references.body.trim()) return null;
 
   const lines = references.body.split('\n').map((line) => line.trim()).filter(Boolean);
-  const numbered = lines.filter((line) => /^(?:\[\d+\]|\d{1,3}\.\s)/.test(line)).length;
+  const numbered = lines.filter((line) => NUMBERED_REFERENCE.test(line)).length;
   const authorFirst = lines.filter((line) => /^[A-Z][A-Za-z'’-]+,\s+[A-Z]\./.test(line)).length;
+
+  if (profile.citations === 'author-year') {
+    const expected = 'unnumbered, alphabetical';
+    if (numbered < 2) return passed('reference-list', 'Reference list numbering', expected, 'unnumbered');
+    return failed('reference-list', 'Reference list numbering', expected, `${numbered} numbered`, {
+      section: 'references',
+      severity: 'Review',
+      manualOnly: true,
+      problem: `The reference list is numbered; ${profile.name} lists references alphabetically by first author, without numbers.`,
+      action: `Remove the numbers and sort the list by first author. ${profile.name} format: ${profile.references.example}`,
+    });
+  }
 
   if (numbered > 0) {
     return passed('reference-list', 'Reference list numbering', 'numbered entries', `${numbered} numbered`);
@@ -427,10 +480,17 @@ function checkAuthorEmail(manuscript, profile) {
 }
 
 function checkLength(manuscript, profile) {
-  if (manuscript.totalWords < 500) return null;
+  const { max, wordsPerPage, excludedSections = [] } = profile.pages;
+  if (!max) return null;
 
-  const { max, wordsPerPage } = profile.pages;
-  const pages = Math.ceil(manuscript.totalWords / wordsPerPage);
+  // Some formats do not count the references (or other closing sections)
+  // towards the page limit.
+  const excludedWords = manuscript.sections
+    .filter((section) => excludedSections.includes(section.name))
+    .reduce((total, section) => total + wordCount(section.body), 0);
+  const words = manuscript.totalWords - excludedWords;
+  if (words < 500) return null;
+  const pages = Math.ceil(words / wordsPerPage);
   const observed = `about ${pages} pages`;
   if (pages <= max) return passed('page-estimate', 'Estimated length', `up to ${max} pages`, observed);
   return failed('page-estimate', 'Estimated length', `up to ${max} pages`, observed, {
@@ -439,6 +499,196 @@ function checkLength(manuscript, profile) {
     manualOnly: true,
     problem: `Estimated length is about ${pages} pages; ${profile.name} papers are usually limited to ${max}.`,
     action: 'The estimate is from word count alone and ignores figures. Check the real page count in the template and your call for papers.',
+  });
+}
+
+// "1, 3–5" → [1, 3, 4, 5]. Very long ranges are ignored as misreads.
+function citedNumbers(group) {
+  const numbers = [];
+  for (const part of group.split(',')) {
+    const [from, to] = part.split(/[-–]/).map((n) => Number(n.trim()));
+    if (!Number.isInteger(to)) numbers.push(from);
+    else if (to >= from && to - from <= 50) for (let n = from; n <= to; n++) numbers.push(n);
+  }
+  return numbers.filter(Number.isInteger);
+}
+
+const listNumbers = (items) => items.map((n) => `[${n}]`).join(', ');
+
+function numericCitationCoverage(manuscript, references) {
+  const listed = new Map();
+  for (const line of references.body.split('\n').map((l) => l.trim())) {
+    const match = line.match(NUMBERED_REFERENCE);
+    if (match) listed.set(Number(match[1] ?? match[2]), line);
+  }
+  const cited = new Map();
+  for (const match of bodyText(manuscript).matchAll(NUMERIC_CITATION_GROUP)) {
+    for (const n of citedNumbers(match[1])) if (!cited.has(n)) cited.set(n, match[0]);
+  }
+  if (listed.size === 0 || cited.size === 0) return null;
+
+  const uncited = [...listed.keys()].filter((n) => !cited.has(n));
+  const missing = [...cited.keys()].filter((n) => !listed.has(n));
+  return {
+    uncited: uncited.map((n) => ({ label: n, phrase: listed.get(n) })),
+    missing: missing.map((n) => ({ label: n, phrase: cited.get(n) })),
+    total: listed.size,
+    describe: listNumbers,
+  };
+}
+
+// Author–year entries are matched to citations by year plus any capitalised
+// name before the year, because formats differ on whether the surname or
+// the given name comes first.
+function authorYearEntries(body) {
+  const blocks = /\n\s*\n/.test(body) ? body.split(/\n\s*\n/) : body.split('\n');
+  return blocks
+    .map((block) => block.trim())
+    .filter((block) => YEAR.test(block))
+    .map((block) => {
+      const flat = block.replace(/\s+/g, ' ');
+      const year = flat.match(YEAR)[0];
+      const names = (flat.slice(0, flat.search(YEAR)).match(CAPITALISED_WORD) || []).filter(
+        (word) => !NAME_FILLERS.has(word),
+      );
+      return { first: block.split('\n')[0].trim(), year, names: new Set(names) };
+    })
+    .filter((entry) => entry.names.size > 0);
+}
+
+function authorYearCitations(text) {
+  const citations = [];
+  for (const phrase of matches(text, PARENTHETICAL_AUTHOR_YEAR)) {
+    for (const piece of phrase.slice(1, -1).split(';')) {
+      const name = piece.match(CAPITALISED_WORD)?.[0];
+      const year = piece.match(YEAR)?.[0];
+      if (name && year) citations.push({ name, year, phrase: piece.trim() });
+    }
+  }
+  for (const phrase of matches(text, NARRATIVE_AUTHOR_YEAR)) {
+    citations.push({ name: phrase.match(CAPITALISED_WORD)[0], year: phrase.match(YEAR)[0], phrase });
+  }
+  return citations;
+}
+
+function authorYearCitationCoverage(manuscript, references) {
+  const entries = authorYearEntries(references.body);
+  const citations = authorYearCitations(bodyText(manuscript));
+  if (entries.length === 0 || citations.length === 0) return null;
+
+  const pairs = (citation, entry) => entry.year === citation.year && entry.names.has(citation.name);
+  const uncited = entries.filter((entry) => !citations.some((citation) => pairs(citation, entry)));
+  const seen = new Set();
+  const missing = citations.filter((citation) => {
+    const key = `${citation.name} ${citation.year}`;
+    if (seen.has(key) || entries.some((entry) => pairs(citation, entry))) return false;
+    seen.add(key);
+    return true;
+  });
+  return {
+    uncited: uncited.map((entry) => ({ label: `${[...entry.names][0]} (${entry.year})`, phrase: entry.first })),
+    missing: missing.map((citation) => ({ label: `${citation.name} (${citation.year})`, phrase: citation.phrase })),
+    total: entries.length,
+    describe: (labels) => labels.join(', '),
+  };
+}
+
+const shortList = (labels, describe) =>
+  labels.length > 6 ? `${describe(labels.slice(0, 6))} and ${labels.length - 6} more` : describe(labels);
+
+function checkCitationCoverage(manuscript, profile) {
+  const references = findSection(manuscript, 'references');
+  if (!references || !references.body.trim()) return null;
+
+  const coverage =
+    profile.citations === 'author-year'
+      ? authorYearCitationCoverage(manuscript, references)
+      : numericCitationCoverage(manuscript, references);
+  if (!coverage) return null;
+
+  const { uncited, missing, total, describe } = coverage;
+  const label = 'Citations match references';
+  const expected = 'every entry cited, every citation listed';
+  if (uncited.length === 0 && missing.length === 0) {
+    return passed('citation-coverage', label, expected, `${total} entries, all cited`);
+  }
+
+  const issues = [];
+  if (uncited.length > 0) {
+    const labels = uncited.map((item) => item.label);
+    issues.push({
+      section: 'references',
+      severity: 'Review',
+      manualOnly: true,
+      problem: `${uncited.length} of ${total} reference ${uncited.length === 1 ? 'entry is' : 'entries are'} never cited in the text: ${shortList(labels, describe)}.`,
+      action: 'Cite each one where the work is used, or remove it from the list.',
+      evidence: evidence(uncited.map((item) => item.phrase)),
+    });
+  }
+  if (missing.length > 0) {
+    const labels = missing.map((item) => item.label);
+    issues.push({
+      section: 'document',
+      severity: 'Review',
+      manualOnly: true,
+      problem: `${missing.length} ${missing.length === 1 ? 'citation points' : 'citations point'} to no entry in the reference list: ${shortList(labels, describe)}.`,
+      action: 'Add the missing entries to the reference list, or correct the citation.',
+      evidence: evidence(missing.map((item) => item.phrase)),
+    });
+  }
+  return failed('citation-coverage', label, expected, `${uncited.length} uncited, ${missing.length} not listed`, ...issues);
+}
+
+// "1–3 and 5" → ['1', '2', '3', '5']; Roman table numbers are kept as written.
+function mentionedNumbers(group) {
+  const numbers = [];
+  for (const part of group.split(/\s*(?:,|and|&)\s*/)) {
+    const [from, to] = part.split(/[-–]/).map((n) => n.trim());
+    if (/^\d+$/.test(from) && /^\d+$/.test(to ?? '') && Number(to) - Number(from) <= 50) {
+      for (let n = Number(from); n <= Number(to); n++) numbers.push(String(n));
+    } else if (from) {
+      numbers.push(from.toUpperCase());
+    }
+  }
+  return numbers;
+}
+
+function checkFloatMentions(manuscript) {
+  const lines = bodyText(manuscript).split('\n').map((line) => line.trim());
+  const kinds = [
+    { captionLine: FIGURE_CAPTION_LINE, captionNumber: FIGURE_CAPTION_NUMBER, mention: FIGURE_MENTION },
+    { captionLine: TABLE_CAPTION_LINE, captionNumber: TABLE_CAPTION_NUMBER, mention: TABLE_MENTION },
+  ];
+
+  const captions = [];
+  const unmentioned = [];
+  for (const kind of kinds) {
+    const own = lines.filter((line) => kind.captionLine.test(line));
+    if (own.length === 0) continue;
+    const prose = lines.filter((line) => !kind.captionLine.test(line)).join('\n');
+    const mentioned = new Set([...prose.matchAll(kind.mention)].flatMap((match) => mentionedNumbers(match[1])));
+    for (const line of own) {
+      const [label, number] = line.match(kind.captionNumber);
+      captions.push(line);
+      if (!mentioned.has(number.toUpperCase())) unmentioned.push({ label, line });
+    }
+  }
+  if (captions.length === 0) return null;
+
+  const label = 'Figures and tables referred to';
+  const expected = 'each one mentioned in the text';
+  if (unmentioned.length === 0) {
+    return passed('float-mentions', label, expected, `${captions.length} of ${captions.length} mentioned`);
+  }
+  const names = unmentioned.map((item) => item.label);
+  const shown = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+  return failed('float-mentions', label, expected, `${unmentioned.length} not mentioned`, {
+    section: 'document',
+    severity: 'Review',
+    manualOnly: true,
+    problem: `${shown} ${unmentioned.length === 1 ? 'is' : 'are'} never referred to in the text.`,
+    action: 'Refer to every figure and table in the text, e.g. "as shown in Fig. 2", near where it appears.',
+    evidence: evidence(unmentioned.map((item) => item.line)),
   });
 }
 
@@ -455,7 +705,9 @@ const CHECKS = [
   checkKeywordLabel,
   checkCitationStyle,
   checkReferenceList,
+  checkCitationCoverage,
   checkCaptions,
+  checkFloatMentions,
   checkAcronyms,
   checkFormalTone,
   checkAuthorEmail,

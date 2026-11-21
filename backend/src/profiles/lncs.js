@@ -4,6 +4,7 @@ module.exports = {
   key: 'lncs',
   name: 'Springer LNCS',
   requiredSections: ['title', 'abstract', 'keywords', 'introduction', 'conclusion', 'references'],
+  citations: 'numeric',
   abstract: { minWords: 150, maxWords: 250 },
   keywords: { min: 4, max: 6, label: 'Keywords' },
   headings: {

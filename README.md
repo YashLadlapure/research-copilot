@@ -1,6 +1,6 @@
 # Research Copilot
 
-Checks a research manuscript against Springer LNCS or IEEE conference formatting rules, and uses Gemini to refine one section at a time. The report is the paper itself, set as a page with each problem marked where it occurs and explained in the margin. Every suggested revision is shown as tracked changes in place and is only applied when the author accepts it.
+Checks a research manuscript against Springer LNCS, IEEE, ACM (sigconf) or ACL conference formatting rules, and uses Gemini to refine one section at a time. The report is the paper itself, set as a page with each problem marked where it occurs and explained in the margin. Every suggested revision is shown as tracked changes in place and is only applied when the author accepts it.
 
 **Live demo:** [research-copilot-eight.vercel.app](https://research-copilot-eight.vercel.app). The API runs on a free instance that sleeps when idle, so the first request can take up to a minute. Use the "Try the sample paper" link to see it work without a manuscript.
 
@@ -9,11 +9,13 @@ Checks a research manuscript against Springer LNCS or IEEE conference formatting
 ## What it does
 
 1. Paste manuscript text or upload a PDF.
-2. Pick a target format: Springer LNCS or IEEE Conference.
+2. Pick a target format: Springer LNCS, IEEE Conference, ACM Conference (acmart sigconf) or ACL (*ACL long papers).
 3. Get the paper back marked up: offending phrases are underlined in the text and each issue sits in the margin beside the section it concerns. A pass/fail table of every automated check and a checklist of layout rules that cannot be verified from text are one tab away.
 4. Ask for a refinement of a section. The revision appears in the paper as a word-level diff.
-5. Accept or discard it. Accepting re-runs the checks.
-6. Print or save the report, including the full text of accepted revisions.
+5. Accept or discard it. Accepting re-runs the checks, and an accepted revision can be undone.
+6. Download the revised paper as text, or print the report with the full text of accepted revisions.
+
+The pasted text and chosen format are kept in the browser, so a reload does not lose the draft.
 
 It does not generate papers, check plagiarism, manage citations, or verify layout (fonts, margins, columns). It works on text only.
 
@@ -50,8 +52,8 @@ Design decisions worth knowing about:
 | Title | no trailing period, not all capitals |
 | Abstract | word count within the profile range, no citations |
 | Keywords | count within range, label matches the format ("Keywords" or "Index Terms") |
-| Citations | numeric in-text style, numbered reference list |
-| Figures and tables | caption format for the profile |
+| Citations | in-text style for the profile (numeric or author–year), reference list numbering, every reference entry cited and every citation listed |
+| Figures and tables | caption format for the profile, every figure and table referred to in the text |
 | Language | undefined acronyms, contractions and conversational phrases per section |
 | Other | author e-mail on the first page, page estimate from word count |
 
@@ -105,6 +107,7 @@ cd backend && npm test  # parser, rule engine, preservation check, refinement re
 | POST | `/api/reanalyze` | `{ sessionId, profile }` | `{ report }` for a different profile, no Gemini call |
 | POST | `/api/refine-section` | `{ sessionId, section }` | `{ suggestion }` |
 | POST | `/api/apply-suggestion` | `{ sessionId, section }` | `{ report, revisions, document }` |
+| POST | `/api/revert-revision` | `{ sessionId, section }` | `{ report, revisions, document }` with the section restored to its text before any accepted revision |
 
 `document` is the parsed paper (byline, sections, sub-headings) that the client draws. Each issue in `report` may carry `evidence`: the exact phrases that triggered it, which the client marks in the text.
 
@@ -119,7 +122,7 @@ backend/
     routes/                 one file per endpoint
     manuscript/             text cleanup, section parser, PDF text handling
     rules/                  compliance checks
-    profiles/               LNCS and IEEE rule values and manual checklists
+    profiles/               LNCS, IEEE, ACM and ACL rule values and manual checklists
     ai/                     Gemini client, front-matter extraction, refinement, preservation check
     store.js                in-memory sessions
   tests/

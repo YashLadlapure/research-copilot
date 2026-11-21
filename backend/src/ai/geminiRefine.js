@@ -76,7 +76,7 @@ function assessProse(original, revised, maxWords) {
   return { rejections, warnings, preservation };
 }
 
-function assessKeywords(revised, { min, max }, groundingText) {
+function assessKeywords(revised, { min, max } = {}, groundingText) {
   const keywords = splitKeywords(revised);
   if (keywords.length === 0) return { unusable: 'It contains no keywords.' };
 
@@ -85,9 +85,11 @@ function assessKeywords(revised, { min, max }, groundingText) {
   const rejections = [];
   const warnings = [];
 
-  if (keywords.length < min || keywords.length > max) {
-    rejections.push(`It lists ${keywords.length} keywords. List between ${min} and ${max}.`);
-    warnings.push(`Lists ${keywords.length} keywords; the expected range is ${min}–${max}.`);
+  // Profiles that set no keyword count (or no keywords at all) skip this.
+  if ((min && keywords.length < min) || (max && keywords.length > max)) {
+    const range = min && max ? `${min}–${max}` : min ? `at least ${min}` : `at most ${max}`;
+    rejections.push(`It lists ${keywords.length} keywords. List ${range}.`);
+    warnings.push(`Lists ${keywords.length} keywords; the expected count is ${range}.`);
   }
   if (ungrounded.length > 0) {
     rejections.push(`These keywords do not appear in the abstract or the current list: ${ungrounded.join(', ')}.`);
@@ -103,7 +105,7 @@ async function refineSection({ section, profile, requirements, abstract }) {
   const isKeywords = section.name === 'keywords';
   const assess = (revised) =>
     isKeywords
-      ? assessKeywords(revised, profile.keywords, `${abstract} ${section.body}`)
+      ? assessKeywords(revised, profile.keywords ?? undefined, `${abstract} ${section.body}`)
       : assessProse(section.body, revised, section.name === 'abstract' ? profile.abstract.maxWords : null);
 
   let rejections = [];

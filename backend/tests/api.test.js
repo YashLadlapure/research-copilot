@@ -150,6 +150,26 @@ test('refine then apply updates the report and records the revision', async (t) 
   assert.equal(again.status, 409);
 });
 
+test('an accepted revision can be undone, restoring the original and its issues', async (t) => {
+  const informal = "3 Conclusion\nThe method doesn't need labels and reaches 91% recall [2].";
+  const formal = 'The method does not need labels and reaches 91% recall [2].';
+  t.mock.method(gemini, 'generateJson', async () => ({ revised_text: formal, change_summary: 'Expanded a contraction.' }));
+
+  const { body: analysis } = await analyze({ conclusion: informal });
+  const { sessionId } = analysis;
+  await post('/api/refine-section', { sessionId, section: 'conclusion' });
+  await post('/api/apply-suggestion', { sessionId, section: 'conclusion' });
+
+  const undo = await post('/api/revert-revision', { sessionId, section: 'conclusion' });
+  assert.equal(undo.status, 200);
+  assert.deepEqual(undo.body.revisions, []);
+  assert.equal(undo.body.document.sections.find((section) => section.name === 'conclusion').body, informal.split('\n')[1]);
+  assert.ok(undo.body.report.issues.some((issue) => issue.id === 'formal-tone:conclusion'));
+
+  const twice = await post('/api/revert-revision', { sessionId, section: 'conclusion' });
+  assert.equal(twice.status, 409);
+});
+
 test('PDF upload rejects files that are not PDFs', async () => {
   const form = new FormData();
   form.append('pdf', new Blob(['plain text pretending to be a pdf'], { type: 'application/pdf' }), 'paper.pdf');

@@ -4,6 +4,7 @@ module.exports = {
   key: 'ieee',
   name: 'IEEE Conference',
   requiredSections: ['title', 'abstract', 'keywords', 'introduction', 'conclusion', 'references'],
+  citations: 'numeric',
   abstract: { minWords: 150, maxWords: 250 },
   keywords: { min: 3, max: 10, label: 'Index Terms' },
   headings: {

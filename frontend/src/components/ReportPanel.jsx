@@ -47,7 +47,7 @@ function Summary({ report }) {
   );
 }
 
-export default function ReportPanel({ analysis, revisions, ...proofProps }) {
+export default function ReportPanel({ analysis, revisions, onUndo, onDownload, undoing, ...proofProps }) {
   const [tab, setTab] = useState('paper');
   const { report, extraction } = analysis;
   const revisedSections = new Set(revisions.map((revision) => revision.section));
@@ -78,7 +78,9 @@ export default function ReportPanel({ analysis, revisions, ...proofProps }) {
           <div className="panel">
             {tab === 'checks' && <CheckTable checks={report.checks} />}
             {tab === 'manual' && <ManualChecklist items={report.manualChecks} profileName={report.profile.name} />}
-            {tab === 'revisions' && <RevisionList revisions={revisions} />}
+            {tab === 'revisions' && (
+              <RevisionList revisions={revisions} onUndo={onUndo} onDownload={onDownload} undoing={undoing} />
+            )}
           </div>
         )}
       </div>

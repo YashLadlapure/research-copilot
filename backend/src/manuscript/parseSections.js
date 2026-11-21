@@ -8,7 +8,7 @@ const ARABIC_HEADING = /^(\d{1,2}(?:\.\d{1,2})*)\.?\s+(\S.*)$/;
 const ROMAN_HEADING = /^([IVX]+)\.\s+(\S.*)$/;
 const ROMAN_NUMERAL = /^(?=[IVX])X{0,3}(?:IX|IV|V?I{0,3})$/;
 const UNNUMBERED_HEADING =
-  /^(abstract|keywords|key words|index terms|introduction|related work|background|literature review|methodology|methods?|experiments|evaluation|results|results and discussion|discussion|conclusions?|conclusions? and future work|future work|acknowledge?ments?|references|bibliography)$/i;
+  /^(abstract|keywords|key words|index terms|introduction|related work|background|literature review|methodology|methods?|experiments|evaluation|results|results and discussion|discussion|conclusions?|conclusions? and future work|future work|limitations|ethics statement|ethical considerations|acknowledge?ments?|references|bibliography)$/i;
 
 // Lines that open a PDF's first page but are not the title.
 const RUNNING_HEAD = /\b(?:journal|proceedings|transactions|vol\.|arxiv|preprint|copyright)\b|©/i;

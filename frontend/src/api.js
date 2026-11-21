@@ -63,6 +63,7 @@ export const analyzeManuscript = (text, profile) => retrying(() => post('/api/an
 export const switchProfile = (sessionId, profile) => post('/api/reanalyze', { sessionId, profile });
 export const refineSection = (sessionId, section) => post('/api/refine-section', { sessionId, section });
 export const applySuggestion = (sessionId, section) => post('/api/apply-suggestion', { sessionId, section });
+export const revertRevision = (sessionId, section) => post('/api/revert-revision', { sessionId, section });
 
 export function extractPdf(file) {
   const form = new FormData();

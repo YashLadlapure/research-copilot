@@ -362,8 +362,19 @@ input {
   text-align: center;
 }
 
+/* Four formats do not fit a phone's width, so the track scrolls sideways
+   instead of pushing the page wider. A fieldset needs min-width: 0 to shrink. */
+.switch {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
 .switch__option {
+  position: relative;
   display: flex;
+  flex-shrink: 0;
 }
 
 .switch__option input {
@@ -1217,6 +1228,28 @@ input {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+.revision-item__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.revision-list__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.revision-list__head p {
+  max-width: 52ch;
+  color: var(--ink-soft);
 }
 
 .revision-item h3 {

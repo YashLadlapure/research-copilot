@@ -17,7 +17,8 @@ function lncsPaper(overrides = {}) {
     abstract: `Abstract. ${filler(170)}`,
     keywords: 'Keywords: anomaly detection · sensor streams · edge computing · time series',
     introduction: '1 Introduction\nSensor networks produce continuous streams [1]. Earlier approaches [2] are costly to run.',
-    method: '2 Method\nThe detector uses a sliding window [3].\nFig. 1. Overview of the pipeline.\nTable 1. Dataset statistics.',
+    method:
+      '2 Method\nThe detector uses a sliding window [3], shown in Fig. 1. Table 1 lists the datasets.\nFig. 1. Overview of the pipeline.\nTable 1. Dataset statistics.',
     conclusion: '3 Conclusion\nThe method detects anomalies with low latency.',
     references: [
       'References',

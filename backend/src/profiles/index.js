@@ -1,7 +1,9 @@
 const lncs = require('./lncs');
 const ieee = require('./ieee');
+const acm = require('./acm');
+const acl = require('./acl');
 
-const profiles = { lncs, ieee };
+const profiles = { lncs, ieee, acm, acl };
 
 function getProfile(key) {
   if (typeof key !== 'string') return null;

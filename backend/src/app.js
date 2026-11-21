@@ -8,6 +8,7 @@ const analyzeRouter = require('./routes/analyze');
 const reanalyzeRouter = require('./routes/reanalyze');
 const refineSectionRouter = require('./routes/refineSection');
 const applySuggestionRouter = require('./routes/applySuggestion');
+const revertRevisionRouter = require('./routes/revertRevision');
 const extractPdfRouter = require('./routes/extractPdf');
 
 const TEN_MINUTES = 10 * 60 * 1000;
@@ -48,6 +49,7 @@ app.use('/api/analyze', limiter(20), analyzeRouter);
 app.use('/api/refine-section', limiter(30), refineSectionRouter);
 app.use('/api/reanalyze', reanalyzeRouter);
 app.use('/api/apply-suggestion', applySuggestionRouter);
+app.use('/api/revert-revision', revertRevisionRouter);
 app.use('/api/extract-pdf', extractPdfRouter);
 
 app.use(notFound);

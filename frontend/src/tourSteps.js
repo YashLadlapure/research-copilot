@@ -28,7 +28,7 @@ export const START_TOUR = {
     {
       target: '[data-tour="format"]',
       title: 'Pick the target format',
-      body: 'Springer LNCS or IEEE Conference. The same paper is checked against that format’s rules. You can switch later without pasting again.',
+      body: 'Springer LNCS, IEEE, ACM or ACL. The same paper is checked against that format’s rules. You can switch later without pasting again.',
     },
     {
       target: '[data-tour="pdf"]',

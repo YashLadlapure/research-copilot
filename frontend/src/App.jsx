@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import './App.css';
-import { wakeServer, analyzeManuscript, switchProfile, refineSection, applySuggestion, extractPdf } from './api';
+import {
+  wakeServer,
+  analyzeManuscript,
+  switchProfile,
+  refineSection,
+  applySuggestion,
+  revertRevision,
+  extractPdf,
+} from './api';
+import { downloadText, fileName, manuscriptText } from './exportText';
+import { PROFILES } from './profiles';
 import { SAMPLE_MANUSCRIPT } from './sampleManuscript';
 import ManuscriptForm from './components/ManuscriptForm';
 import ProfileSwitch from './components/ProfileSwitch';
@@ -44,14 +54,58 @@ function useServerStatus() {
   return [status, setStatus];
 }
 
+// The pasted text and chosen format survive a reload. Storage can be missing
+// or full (private windows, large papers), and the app works without it.
+const DRAFT_KEY = 'research-copilot:draft';
+const DRAFT_SAVE_DELAY_MS = 500;
+
+function readDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
+    const known = PROFILES.some((option) => option.value === draft?.profile);
+    return { text: typeof draft?.text === 'string' ? draft.text : '', profile: known ? draft.profile : 'lncs' };
+  } catch {
+    return { text: '', profile: 'lncs' };
+  }
+}
+
+function useSavedDraft(text, profile) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        if (text.trim()) localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, profile }));
+        else localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // Not saving the draft is fine; the text is still in the form.
+      }
+    }, DRAFT_SAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [text, profile]);
+}
+
+// Accepted revisions live only in this tab and in a server session that
+// expires, so leaving before downloading them loses them.
+function useLeaveWarning(active) {
+  useEffect(() => {
+    if (!active) return undefined;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [active]);
+}
+
 const SERVER_MESSAGES = {
   waking: 'Waking the server. The first check can take up to a minute.',
   down: 'Still no answer from the server. You can try the check anyway.',
 };
 
 export default function App() {
-  const [text, setText] = useState('');
-  const [profile, setProfile] = useState('lncs');
+  const [draft] = useState(readDraft);
+  const [text, setText] = useState(draft.text);
+  const [profile, setProfile] = useState(draft.profile);
   const [analysis, setAnalysis] = useState(null);
   const [revisions, setRevisions] = useState([]);
   const [acknowledged, setAcknowledged] = useState(() => new Set());
@@ -60,11 +114,16 @@ export default function App() {
   const [analyzing, setAnalyzing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [undoing, setUndoing] = useState(null);
+  const [downloaded, setDownloaded] = useState(false);
   const [uploadNote, setUploadNote] = useState(null);
   const [error, setError] = useState(null);
 
   const [server, setServer] = useServerStatus();
   const slow = useSlowHint(analyzing || uploading);
+  const unsavedRevisions = revisions.length > 0 && !downloaded;
+  useSavedDraft(text, profile);
+  useLeaveWarning(unsavedRevisions);
 
   // A first-time visitor gets a short tour of each screen once. The button in
   // the top bar opens it again.
@@ -79,6 +138,7 @@ export default function App() {
   const clearSession = () => {
     setAnalysis(null);
     setRevisions([]);
+    setDownloaded(false);
     setAcknowledged(new Set());
     setRefinement(IDLE);
   };
@@ -161,12 +221,41 @@ export default function App() {
       const result = await applySuggestion(analysis.sessionId, refinement.section);
       setAnalysis((current) => ({ ...current, report: result.report, document: result.document }));
       setRevisions(result.revisions);
+      setDownloaded(false);
       setRefinement(IDLE);
     } catch (err) {
       reportFailure(err);
     } finally {
       setApplying(false);
     }
+  };
+
+  const handleUndo = async (section) => {
+    setUndoing(section);
+    setError(null);
+    try {
+      const result = await revertRevision(analysis.sessionId, section);
+      setAnalysis((current) => ({ ...current, report: result.report, document: result.document }));
+      setRevisions(result.revisions);
+      setDownloaded(false);
+      if (refinement.section === section) setRefinement(IDLE);
+    } catch (err) {
+      reportFailure(err);
+    } finally {
+      setUndoing(null);
+    }
+  };
+
+  const handleDownload = () => {
+    downloadText(manuscriptText(analysis.title, analysis.document), fileName(analysis.title));
+    setDownloaded(true);
+  };
+
+  const handleNewCheck = () => {
+    if (unsavedRevisions && !window.confirm('Start a new check? Accepted revisions you have not downloaded will be lost.')) {
+      return;
+    }
+    clearSession();
   };
 
   const toggleAcknowledged = (issueId) => {
@@ -191,7 +280,7 @@ export default function App() {
                 disabled={refinement.status === 'loading' || applying}
               />
               <div className="toolbar__actions">
-                <button type="button" className="btn btn--secondary btn--small" onClick={clearSession}>
+                <button type="button" className="btn btn--secondary btn--small" onClick={handleNewCheck}>
                   New check
                 </button>
                 <button type="button" className="btn btn--secondary btn--small" data-tour="print" onClick={() => window.print()}>
@@ -232,13 +321,16 @@ export default function App() {
               onDiscard={() => setRefinement(IDLE)}
               onRetry={() => handleRefine(refinement.section)}
               onToggleAcknowledged={toggleAcknowledged}
+              onUndo={handleUndo}
+              onDownload={handleDownload}
+              undoing={undoing}
             />
           </main>
         ) : (
           <main className="start">
             <h1 className="start__headline">See your paper marked up before you submit it.</h1>
             <p className="start__lede">
-              Research Copilot checks a manuscript against Springer LNCS or IEEE conference formatting rules
+              Research Copilot checks a manuscript against Springer LNCS, IEEE, ACM or ACL conference formatting rules
               and pins each problem to the place it occurs. Wording problems can be rewritten for you to
               review, with a check that no number or citation changed.
             </p>
